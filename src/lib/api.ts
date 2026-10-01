@@ -127,6 +127,7 @@ export const api = {
     createProgram: (input: Record<string, unknown>) => request<{ data: unknown }>('/learning/admin/programs', { method: 'POST', body: JSON.stringify(input) }),
     adminOverview: () => request<{ data: Record<string, unknown> }>('/admin/overview'),
     adminTaxonomy: () => request<{ data: { levels: Record<string, unknown>[]; grades: Record<string, unknown>[]; programs: Record<string, unknown>[]; subjects: Record<string, unknown>[] } }>('/admin/taxonomy'),
+    adminReview: () => request<{ data: Record<string, unknown>[] }>('/admin/review'),
     adminUsers: (search?: string) => request<{ data: Record<string, unknown>[] }>(`/admin/users${search ? `?search=${encodeURIComponent(search)}` : ''}`),
     adminTeachers: () => request<{ data: Record<string, unknown>[] }>('/admin/teachers'),
     adminContent: (type: string) => request<{ data: Record<string, unknown>[] }>(`/admin/content/${type}`),

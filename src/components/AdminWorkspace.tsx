@@ -12,7 +12,7 @@ const contentTabs = [
     ['Courses', 'courses'], ['Modules', 'modules'], ['Lessons', 'lessons'], ['Lesson notes', 'notes'],
     ['Examples', 'examples'], ['Exercises', 'exercises'], ['Homework', 'assignments'], ['Quizzes', 'quizzes'], ['Tests', 'tests'], ['Exams', 'exams'],
 ] as const
-const tabs = [['Dashboard', 'dashboard'], ...contentTabs, ['Teachers', 'teachers'], ['Teacher Verification', 'verification'], ['Students', 'students'], ['AI Tutor', 'ai'], ['Settings', 'settings'], ['Audit Logs', 'audit']] as const
+const tabs = [['Dashboard', 'dashboard'], ...contentTabs, ['Teachers', 'teachers'], ['Teacher Verification', 'verification'], ['Content Review', 'review'], ['Students', 'students'], ['AI Tutor', 'ai'], ['Settings', 'settings'], ['Audit Logs', 'audit']] as const
 
 function text(value: unknown) { return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value) }
 function titleFor(record: RecordValue) { return text(record.title || record.name || record.prompt || 'Untitled') }
@@ -26,6 +26,7 @@ export default function AdminWorkspace({ role }: AdminWorkspaceProps) {
     const [teachers, setTeachers] = useState<RecordValue[]>([])
     const [users, setUsers] = useState<RecordValue[]>([])
     const [auditLogs, setAuditLogs] = useState<RecordValue[]>([])
+    const [reviewRows, setReviewRows] = useState<RecordValue[]>([])
     const [form, setForm] = useState<RecordValue>({})
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
@@ -41,6 +42,7 @@ export default function AdminWorkspace({ role }: AdminWorkspaceProps) {
         setError('')
         if (nextTab === 'dashboard') { setOverview((await api.adminOverview()).data); return }
         if (nextTab === 'teachers' || nextTab === 'verification') { setTeachers((await api.adminTeachers()).data); return }
+        if (nextTab === 'review') { setReviewRows((await api.adminReview()).data); return }
         if (nextTab === 'students') { setUsers((await api.adminUsers()).data.filter((user) => user.role === 'student')); return }
         if (nextTab === 'audit') { setAuditLogs((await api.adminAuditLogs()).data); return }
         const content = contentTabs.find((item) => item[1] === nextTab)
@@ -73,6 +75,7 @@ export default function AdminWorkspace({ role }: AdminWorkspaceProps) {
         {content && <ContentSection label={content[0]} type={content[1]} rows={rows} form={form} busy={busy} taxonomy={taxonomy} teachers={teachers} options={contentOptions} setField={setField} create={create} changeStatus={changeStatus} remove={remove} />}
         {tab === 'teachers' && <TeacherSection teachers={teachers} create={async (input) => { await api.createAdminTeacher(input); await loadTab(tab) }} verify={async (id, status) => { await api.updateTeacherStatus(id, status); await loadTab(tab) }} resend={async (id) => { await api.resendTeacherVerification(id); await loadTab(tab) }} savePermissions={async (id, permissions) => { await api.setTeacherPermissions(id, permissions); await loadTab(tab) }} />}
         {tab === 'verification' && <TeacherSection teachers={teachers} create={async (input) => { await api.createAdminTeacher(input); await loadTab(tab) }} verify={async (id, status) => { await api.updateTeacherStatus(id, status); await loadTab(tab) }} resend={async (id) => { await api.resendTeacherVerification(id); await loadTab(tab) }} savePermissions={async (id, permissions) => { await api.setTeacherPermissions(id, permissions); await loadTab(tab) }} verification />}
+        {tab === 'review' && <ReviewSection rows={reviewRows} />}
         {tab === 'students' && <UsersSection users={users} />}
         {tab === 'ai' && <section className="admin-panel admin-full-panel"><p className="eyebrow">AI Tutor governance</p><h2>AI drafts remain reviewable</h2><p>Teacher and AI-generated material must be saved as draft content and published through this CMS before students can see it.</p></section>}
         {tab === 'settings' && <section className="admin-panel admin-full-panel"><p className="eyebrow">Platform settings</p><h2>Publishing policy</h2><p>Students receive only published content that matches their education level, class, and program profile.</p></section>}
@@ -117,3 +120,4 @@ function TeacherRow({ teacher, verify, resend, savePermissions }: { teacher: Rec
 function MailIcon() { return <span aria-hidden="true">@</span> }
 function UsersSection({ users }: { users: RecordValue[] }) { return <section className="admin-panel admin-full-panel"><p className="eyebrow">Student accounts</p><h2>Students</h2>{users.map((user) => <div className="admin-table-row" key={text(user.id)}><div><strong>{text(user.full_name)}</strong><small>{text(user.email)}</small></div><span className="status-pill published">{text(user.status)}</span><span>{text(user.created_at)}</span></div>)}{!users.length && <p className="admin-empty">No students found.</p>}</section> }
 function AuditSection({ rows }: { rows: RecordValue[] }) { return <section className="admin-panel admin-full-panel"><p className="eyebrow">Immutable history</p><h2>Audit logs</h2>{rows.map((row) => <div className="audit-row" key={text(row.id)}><strong>{text(row.action)}</strong><span>{text(row.entity_type)} · {text(row.entity_id)}</span><small>{text(row.created_at)}</small></div>)}{!rows.length && <p className="admin-empty">No admin actions recorded yet.</p>}</section> }
+function ReviewSection({ rows }: { rows: RecordValue[] }) { return <section className="admin-panel admin-full-panel"><div className="section-heading compact"><div><p className="eyebrow">Teacher submissions</p><h2>Content review</h2></div><span className="status-pill draft">{rows.length} awaiting action</span></div>{rows.map((row) => <div className="admin-table-row" key={`${text(row.content_type)}-${text(row.id)}`}><div><strong>{text(row.title)}</strong><small>{text(row.teacher)} · {text(row.subject)} · {text(row.class_name) || 'Unassigned class'} · {text(row.program) || 'No program'}</small></div><span className="status-pill draft">{text(row.content_type)} · {text(row.status)}</span><div className="admin-table-actions"><button onClick={() => void api.setAdminContentStatus(text(row.content_type) === 'course' ? 'courses' : text(row.content_type) === 'lesson' ? 'lessons' : 'assignments', text(row.id), 'published')}>Publish</button><button onClick={() => void api.setAdminContentStatus(text(row.content_type) === 'course' ? 'courses' : text(row.content_type) === 'lesson' ? 'lessons' : 'assignments', text(row.id), 'rejected')}>Request changes</button><button onClick={() => void api.setAdminContentStatus(text(row.content_type) === 'course' ? 'courses' : text(row.content_type) === 'lesson' ? 'lessons' : 'assignments', text(row.id), 'archived')}><Archive size={14} /> Archive</button></div></div>)}{!rows.length && <p className="admin-empty">No teacher content is waiting for review.</p>}</section> }

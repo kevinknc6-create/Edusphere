@@ -7,6 +7,23 @@ export type Permission =
     | 'courses.moderate'
     | 'system.manage'
     | 'audit.view'
+    | 'courses.create'
+    | 'courses.update'
+    | 'courses.delete'
+    | 'courses.publish'
+    | 'lessons.create'
+    | 'lessons.update'
+    | 'lessons.delete'
+    | 'quizzes.create'
+    | 'quizzes.update'
+    | 'tests.create'
+    | 'tests.update'
+    | 'exams.create'
+    | 'exams.update'
+    | 'homework.create'
+    | 'homework.update'
+    | 'students.view'
+    | 'results.view'
 
 const rolePermissions: Record<AppRole, readonly Permission[]> = {
     student: [],

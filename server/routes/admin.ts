@@ -45,6 +45,23 @@ router.get('/taxonomy', asyncHandler(async (_request, response) => {
     response.json({ data: { levels: levels.rows, grades: grades.rows, programs: programs.rows, subjects: subjects.rows } })
 }))
 
+router.get('/review', asyncHandler(async (_request, response) => {
+    const result = await pool.query(`
+        SELECT c.id, 'course' AS content_type, c.title, c.status, c.created_at, u.full_name AS teacher, s.name AS subject, g.name AS class_name, p.name AS program
+        FROM courses c JOIN users u ON u.id = c.teacher_id JOIN subjects s ON s.id = c.subject_id LEFT JOIN grades g ON g.id = c.grade_id LEFT JOIN programs p ON p.id = c.program_id
+        WHERE c.status IN ('pending', 'rejected')
+        UNION ALL
+        SELECT l.id, 'lesson', l.title, l.status, c.updated_at, u.full_name, s.name, g.name, p.name
+        FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id JOIN users u ON u.id = c.teacher_id JOIN subjects s ON s.id = c.subject_id LEFT JOIN grades g ON g.id = c.grade_id LEFT JOIN programs p ON p.id = c.program_id
+        WHERE l.status IN ('pending', 'rejected')
+        UNION ALL
+        SELECT a.id, 'homework', a.title, a.status, a.due_at, u.full_name, s.name, g.name, p.name
+        FROM assignments a JOIN courses c ON c.id = a.course_id JOIN users u ON u.id = a.teacher_id JOIN subjects s ON s.id = c.subject_id LEFT JOIN grades g ON g.id = c.grade_id LEFT JOIN programs p ON p.id = c.program_id
+        WHERE a.status IN ('pending', 'rejected')
+        ORDER BY created_at DESC`)
+    response.json({ data: result.rows })
+}))
+
 router.get('/users', asyncHandler(async (request, response) => {
     const search = z.string().trim().max(120).optional().parse(request.query.search)
     const result = await pool.query('SELECT id, email, full_name, role, status, created_at, last_login_at FROM users WHERE ($1::text IS NULL OR full_name ILIKE $2 OR email ILIKE $2) ORDER BY created_at DESC LIMIT 200', [search || null, search ? `%${search}%` : null])
@@ -64,8 +81,12 @@ router.get('/teachers', asyncHandler(async (_request, response) => {
     const result = await pool.query(`SELECT u.id, u.email, u.full_name, u.status, u.created_at, u.last_login_at, t.bio, t.teacher_verification_status, t.rejected_reason,
         COALESCE(string_agg(DISTINCT s.name, ', ' ORDER BY s.name), '') AS subjects,
         count(DISTINCT c.id)::int AS courses,
+        count(DISTINCT c.id) FILTER (WHERE c.status = 'published')::int AS published_courses,
+        count(DISTINCT c.id) FILTER (WHERE c.status = 'draft')::int AS draft_courses,
+        COALESCE(string_agg(DISTINCT concat_ws(' / ', el.name, g.name, p.name), ', ') FILTER (WHERE el.name IS NOT NULL OR g.name IS NOT NULL OR p.name IS NOT NULL), '') AS class_assignments,
+        max(c.updated_at) AS last_activity,
         COALESCE(array_agg(DISTINCT tp.permission) FILTER (WHERE tp.permission IS NOT NULL), '{}') AS permissions
-        FROM users u JOIN teachers t ON t.user_id = u.id LEFT JOIN subject_teachers st ON st.teacher_id = u.id LEFT JOIN subjects s ON s.id = st.subject_id LEFT JOIN courses c ON c.teacher_id = u.id LEFT JOIN teacher_permissions tp ON tp.teacher_id = u.id
+        FROM users u JOIN teachers t ON t.user_id = u.id LEFT JOIN subject_teachers st ON st.teacher_id = u.id LEFT JOIN subjects s ON s.id = st.subject_id LEFT JOIN courses c ON c.teacher_id = u.id LEFT JOIN education_levels el ON el.id = c.education_level_id LEFT JOIN grades g ON g.id = c.grade_id LEFT JOIN programs p ON p.id = c.program_id LEFT JOIN teacher_permissions tp ON tp.teacher_id = u.id
         WHERE u.role = 'teacher' GROUP BY u.id, t.teacher_verification_status, t.rejected_reason, t.bio ORDER BY u.full_name`)
     response.json({ data: result.rows })
 }))

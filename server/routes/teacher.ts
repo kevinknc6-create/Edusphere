@@ -17,14 +17,19 @@ router.use((request, _response, next) => {
 })
 router.use((request, _response, next) => {
     if (request.method === 'GET') return next()
-    pool.query(`SELECT 1 FROM teacher_permissions WHERE teacher_id = $1 AND permission = ANY($2::text[])`, [request.auth!.userId, ['content.create', 'content.edit', 'content.publish', 'assessment.manage']])
+    pool.query(`SELECT 1 FROM teacher_permissions WHERE teacher_id = $1 AND permission = ANY($2::text[])`, [request.auth!.userId, ['content.create', 'content.edit', 'content.publish', 'assessment.manage', 'courses.create', 'courses.update', 'courses.publish', 'lessons.create', 'lessons.update', 'quizzes.create', 'quizzes.update', 'tests.create', 'tests.update', 'exams.create', 'exams.update', 'homework.create', 'homework.update', 'students.view', 'results.view']])
         .then((result) => result.rows[0] ? next() : next(new HttpError(403, 'Teacher permission is required')))
         .catch(next)
 })
 
 function requireTeacherPermission(permission: string) {
+    const aliases: Record<string, string[]> = {
+        'content.create': ['content.create', 'courses.create', 'lessons.create', 'homework.create', 'quizzes.create', 'tests.create', 'exams.create'],
+        'content.edit': ['content.edit', 'courses.update', 'lessons.update', 'homework.update', 'quizzes.update', 'tests.update', 'exams.update'],
+        'content.publish': ['content.publish', 'courses.publish'],
+    }
     return (request: Request, _response: Response, next: NextFunction) => {
-        pool.query('SELECT 1 FROM teacher_permissions WHERE teacher_id = $1 AND permission = $2', [request.auth!.userId, permission])
+        pool.query('SELECT 1 FROM teacher_permissions WHERE teacher_id = $1 AND permission = ANY($2::text[])', [request.auth!.userId, aliases[permission] || [permission]])
             .then((result) => result.rows[0] ? next() : next(new HttpError(403, 'Teacher permission is required')))
             .catch(next)
     }
