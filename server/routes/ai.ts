@@ -19,14 +19,24 @@ const chatInput = z.object({
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
-async function buildContext(input: z.infer<typeof chatInput>) {
+async function buildContext(input: z.infer<typeof chatInput>, userId: string, role: string) {
     const context: string[] = []
     if (input.courseId) {
-        const course = await pool.query(`SELECT c.title, c.description, s.name AS subject, c.difficulty FROM courses c JOIN subjects s ON s.id = c.subject_id WHERE c.id = $1`, [input.courseId])
+        const course = role === 'student'
+            ? await pool.query(`SELECT c.title, c.description, s.name AS subject, c.difficulty FROM courses c JOIN subjects s ON s.id = c.subject_id JOIN students sp ON sp.user_id = $2 WHERE c.id = $1 AND c.status = 'published' AND c.education_level_id = sp.education_level_id AND c.grade_id IS NOT DISTINCT FROM sp.grade_id AND c.program_id IS NOT DISTINCT FROM sp.program_id`, [input.courseId, userId])
+            : role === 'teacher'
+                ? await pool.query(`SELECT c.title, c.description, s.name AS subject, c.difficulty FROM courses c JOIN subjects s ON s.id = c.subject_id WHERE c.id = $1 AND c.teacher_id = $2`, [input.courseId, userId])
+                : await pool.query(`SELECT c.title, c.description, s.name AS subject, c.difficulty FROM courses c JOIN subjects s ON s.id = c.subject_id WHERE c.id = $1`, [input.courseId])
+        if (input.courseId && !course.rows[0] && role === 'student') throw new HttpError(404, 'Published course context not found')
         if (course.rows[0]) context.push(`Course: ${course.rows[0].title}; subject: ${course.rows[0].subject}; difficulty: ${course.rows[0].difficulty}; description: ${course.rows[0].description}`)
     }
     if (input.lessonId) {
-        const lesson = await pool.query(`SELECT l.title, l.content, m.title AS module FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = $1`, [input.lessonId])
+        const lesson = role === 'student'
+            ? await pool.query(`SELECT l.title, l.content, m.title AS module FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id JOIN students sp ON sp.user_id = $2 WHERE l.id = $1 AND l.status = 'published' AND m.status = 'published' AND c.status = 'published' AND c.education_level_id = sp.education_level_id AND c.grade_id IS NOT DISTINCT FROM sp.grade_id AND c.program_id IS NOT DISTINCT FROM sp.program_id`, [input.lessonId, userId])
+            : role === 'teacher'
+                ? await pool.query(`SELECT l.title, l.content, m.title AS module FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE l.id = $1 AND c.teacher_id = $2`, [input.lessonId, userId])
+                : await pool.query(`SELECT l.title, l.content, m.title AS module FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = $1`, [input.lessonId])
+        if (input.lessonId && !lesson.rows[0] && role === 'student') throw new HttpError(404, 'Published lesson context not found')
         if (lesson.rows[0]) context.push(`Lesson: ${lesson.rows[0].title}; module: ${lesson.rows[0].module}; content: ${JSON.stringify(lesson.rows[0].content)}`)
     }
     return context.join('\n')
@@ -52,7 +62,7 @@ router.use(requireAuth, aiRateLimit)
 router.post('/chat', asyncHandler(async (request, response) => {
     const input = chatInput.parse(request.body)
     const userId = request.auth!.userId
-    const context = await buildContext(input)
+    const context = await buildContext(input, request.auth!.userId, request.auth!.role)
     let conversationId = input.conversationId
     if (conversationId) {
         const owned = await pool.query('SELECT id FROM ai_conversations WHERE id = $1 AND user_id = $2', [conversationId, userId])
