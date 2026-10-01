@@ -82,7 +82,7 @@ export default function StudentDashboard({ userName, courses, subjects, onExplor
             </div>
             <div className="student-header-actions">
                 <button className="student-icon-button" aria-label="Notifications"><Bell size={19} /><i /></button>
-                <button className="student-icon-button" aria-label="Change learning path" onClick={onChangeLearningPath}><Settings2 size={19} /></button>
+                <button className="student-icon-button" aria-label={profile?.education_level_id ? 'Change learning path' : 'Set up learning path'} title={profile?.education_level_id ? 'Change learning path' : 'Set up learning path'} onClick={onChangeLearningPath}><Settings2 size={19} /></button>
                 <button className="student-profile-button"><span className="student-avatar">{initials || 'S'}</span><span><strong>{userName}</strong><small>Student profile</small></span><ChevronRight size={16} /></button>
             </div>
         </header>

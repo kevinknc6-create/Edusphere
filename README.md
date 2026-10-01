@@ -135,6 +135,7 @@ Copy-Item .env.example .env
 ```
 
 Set strong values for `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` in `.env`.
+For password recovery emails, also set `RESEND_API_KEY` and `MAIL_FROM` to a verified sender address. Without `RESEND_API_KEY`, development logs the one-time code locally; production refuses to send reset requests until email delivery is configured.
 
 ## Database setup
 
@@ -148,6 +149,7 @@ CREATE DATABASE edusphere OWNER edusphere;
 ```bash
 psql "$env:DATABASE_URL" -f server/db/migrations/001_initial.sql
 psql "$env:DATABASE_URL" -f server/db/migrations/002_learning_ai.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/012_password_reset_codes.sql
 ```
 
 The migrations preserve the existing schema and add the education taxonomy, optional course taxonomy links, private AI conversations/messages, and teacher-generated draft content. Apply `002_learning_ai.sql` only after the existing initial schema is present.

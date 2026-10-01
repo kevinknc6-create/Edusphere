@@ -6,9 +6,8 @@ type LoginImpactSceneProps = {
 
 export default function LoginImpactScene({ onReveal }: LoginImpactSceneProps) {
     useEffect(() => {
-        const revealTimer = window.setTimeout(onReveal, 5200)
-        return () => window.clearTimeout(revealTimer)
-    }, [])
+        onReveal()
+    }, [onReveal])
 
     return <div className="auth-scene-effects" aria-hidden="true">
         <div className="auth-school-lights" />

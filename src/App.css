@@ -1996,7 +1996,8 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     background: var(--surface);
-    animation: auth-shell-reveal 900ms cubic-bezier(.22, 1, .36, 1) both;
+    opacity: 1;
+    animation: none;
 }
 
 .auth-visual {
@@ -2005,7 +2006,7 @@
     padding: 30px 45px;
     color: #fff;
     background: #1b2c4b;
-    animation: auth-camera-shake 6500ms 0ms cubic-bezier(.22, 1, .36, 1) both;
+    animation: none;
 }
 
 .auth-visual::before {
@@ -2029,8 +2030,8 @@
     background: radial-gradient(circle, #dff2ff 0%, #8ab7ff 32%, rgba(99, 151, 255, 0.3) 58%, transparent 72%);
     box-shadow: 0 0 0 8px rgba(140, 180, 255, 0.18), 0 0 32px rgba(96, 167, 255, 0.8);
     opacity: 0;
-    transform: translate3d(0, 24px, 0) scale(0.6);
-    animation: auth-impact-point 6500ms ease-out both;
+    transform: none;
+    animation: none;
 }
 
 .auth-energy {
@@ -2045,7 +2046,7 @@
     border-radius: 50%;
     background: radial-gradient(circle, rgba(130, 185, 255, 0.9) 0%, rgba(99, 146, 255, 0.7) 20%, rgba(92, 126, 255, 0.28) 42%, transparent 68%);
     filter: blur(5px);
-    animation: auth-energy-burst 6500ms ease-out both;
+    animation: none;
 }
 
 .auth-cracks {
@@ -2063,8 +2064,8 @@
         linear-gradient(62deg, transparent 0 43%, rgba(162, 218, 255, 0.9) 44% 46%, transparent 47%),
         linear-gradient(112deg, transparent 0 55%, rgba(162, 218, 255, 0.9) 56% 58%, transparent 59%),
         linear-gradient(74deg, transparent 0 67%, rgba(162, 218, 255, 0.9) 68% 70%, transparent 71%);
-    transform: scale(0.7);
-    animation: auth-crack-spread 6500ms ease-out both;
+    transform: none;
+    animation: none;
 }
 
 .auth-student {
@@ -2075,8 +2076,8 @@
     width: 110px;
     height: 180px;
     pointer-events: none;
-    transform: translateX(-32px);
-    animation: auth-student-arrival 6500ms cubic-bezier(.22, 1, .36, 1) both;
+    transform: none;
+    animation: none;
 }
 
 .student-head {
@@ -2111,7 +2112,7 @@
     background: linear-gradient(180deg, #f7b38d 0%, #d7735d 100%);
     box-shadow: 0 12px 18px rgba(9, 16, 32, 0.38);
     transform-origin: 50% 100%;
-    animation: auth-backpack-impact 6500ms cubic-bezier(.22, 1, .36, 1) both;
+    animation: none;
 }
 
 .auth-visual .brand {
@@ -2119,7 +2120,7 @@
     z-index: 10;
     padding: 0;
     color: #fff;
-    animation: auth-brand-reveal 900ms 350ms cubic-bezier(.22, 1, .36, 1) both;
+    animation: none;
 }
 
 .auth-quote {
@@ -2128,7 +2129,7 @@
     top: 32%;
     left: 16%;
     max-width: 370px;
-    animation: auth-quote-reveal 1100ms 1500ms cubic-bezier(.22, 1, .36, 1) both;
+    animation: none;
 }
 
 .auth-quote h1 {
@@ -2160,7 +2161,7 @@
     transform: rotate(-25deg);
     box-shadow: 0 0 0 30px #ffffff08, 0 0 0 60px #ffffff05;
     transform-origin: 50% 50%;
-    animation: auth-orbit-reveal 6000ms 0ms cubic-bezier(.22, 1, .36, 1) both;
+    animation: none;
 }
 
 .auth-orbit::before {
@@ -2200,11 +2201,11 @@
 
 .auth-form {
     width: min(100%, 390px);
-    pointer-events: none;
-    opacity: 0;
-    filter: blur(12px);
-    transform: translateY(42px) scale(.88);
-    animation: auth-form-reveal 1000ms 5200ms cubic-bezier(.22, 1, .36, 1) both;
+    pointer-events: auto;
+    opacity: 1;
+    filter: none;
+    transform: none;
+    animation: none;
 }
 
 @keyframes auth-shell-reveal {
@@ -4147,6 +4148,48 @@
     color: #39916a;
     background: #eaf8ef;
     border: 1px solid #b8e2c8;
+}
+
+.auth-password-feedback {
+    display: grid;
+    gap: 6px;
+    padding-top: 2px;
+    color: var(--login-ink-500, #7c8aa5);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.auth-password-meter {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+}
+
+.auth-password-meter i {
+    height: 4px;
+    border-radius: 99px;
+    background: rgba(122, 142, 180, .28);
+}
+
+.auth-password-meter.strength-weak .filled {
+    background: #fb7185;
+}
+
+.auth-password-meter.strength-fair .filled {
+    background: #fbbf24;
+}
+
+.auth-password-meter.strength-good .filled {
+    background: #60a5fa;
+}
+
+.auth-password-meter.strength-strong .filled {
+    background: #4ade80;
+}
+
+.auth-password-feedback small {
+    color: var(--login-ink-300, #aab6cc);
+    font-size: 11px;
 }
 
 /* Login reference treatment; auth-only so the learning workspace keeps its design. */
@@ -7282,31 +7325,33 @@
 .auth-scene .auth-form {
     position: relative;
     z-index: 2;
-    opacity: 0;
-    filter: blur(14px);
-    transform: translateY(46px) scale(.9);
-    pointer-events: none;
+    opacity: 1;
+    filter: none;
+    transform: none;
+    pointer-events: auto;
     animation: none;
 }
 
 .auth-scene .auth-form.is-revealed {
-    animation: login-form-emerge 1300ms 0ms cubic-bezier(.22, 1, .36, 1) both;
+    animation: none;
 }
 
 .auth-scene .auth-impact-point {
     left: 25%;
     bottom: 10%;
-    animation: login-impact 7000ms ease-out both;
+    animation: none;
+    opacity: 0;
 }
 
 .auth-scene .auth-student {
     left: 7%;
     bottom: 10%;
-    animation: login-student-journey 7000ms cubic-bezier(.22, 1, .36, 1) both;
+    animation: none;
+    opacity: 0;
 }
 
 .auth-scene .student-bag {
-    animation: login-backpack-slam 7000ms cubic-bezier(.22, 1, .36, 1) both;
+    animation: none;
 }
 
 .auth-rays,
@@ -7319,12 +7364,13 @@
     border-radius: 50%;
     opacity: 0;
     pointer-events: none;
+    display: none;
 }
 
 .auth-rays {
     background: repeating-conic-gradient(from 8deg, transparent 0 7deg, rgba(154, 208, 255, .7) 8deg 9deg, transparent 10deg 22deg);
     filter: blur(1px);
-    animation: login-rays 7000ms ease-out both;
+    animation: none;
 }
 
 .auth-particles {
@@ -7332,15 +7378,17 @@
     height: 260px;
     border-radius: 0;
     background: radial-gradient(circle at 8% 65%, #d9f1ff 0 2px, transparent 3px), radial-gradient(circle at 20% 22%, #8ab8ff 0 2px, transparent 3px), radial-gradient(circle at 37% 82%, #c5e7ff 0 2px, transparent 3px), radial-gradient(circle at 55% 12%, #8ab8ff 0 1px, transparent 2px), radial-gradient(circle at 73% 64%, #d9f1ff 0 2px, transparent 3px), radial-gradient(circle at 90% 30%, #8ab8ff 0 2px, transparent 3px);
-    animation: login-particles 7000ms ease-out both;
+    animation: none;
 }
 
 .auth-scene .auth-energy {
-    animation: login-energy-burst 7000ms ease-out both;
+    animation: none;
+    opacity: 0;
 }
 
 .auth-scene .auth-cracks {
-    animation: login-cracks 7000ms ease-out both;
+    animation: none;
+    opacity: 0;
 }
 
 @keyframes login-student-journey {

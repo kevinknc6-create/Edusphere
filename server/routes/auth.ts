@@ -10,9 +10,21 @@ import { signAccessToken } from '../middleware/auth.js'
 
 const router = Router()
 const passwordSchema = z.string().min(12, 'Password must be at least 12 characters').max(128)
-const credentialsSchema = z.object({ email: z.string().email().transform((value) => value.toLowerCase()), password: passwordSchema, fullName: z.string().min(2).max(120).optional() })
+const credentialsSchema = z.object({ email: z.string().trim().email().transform((value) => value.toLowerCase()), password: passwordSchema, fullName: z.string().trim().min(2).max(120).optional() })
+const registrationSchema = credentialsSchema.extend({ fullName: z.string().trim().min(2).max(120) })
+const passwordResetRequestSchema = z.object({ email: z.string().trim().email().transform((value) => value.toLowerCase()), fullName: z.string().trim().min(2).max(120) })
+const passwordCodeSchema = passwordResetRequestSchema.extend({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit verification code') })
 
 function hashToken(token: string) { return crypto.createHash('sha256').update(token).digest('hex') }
+function createVerificationCode() { return crypto.randomInt(100000, 1000000).toString() }
+async function sendPasswordResetCode(email: string, code: string) {
+    if (!env.RESEND_API_KEY) {
+        if (env.NODE_ENV === 'development') { console.info(`[development] Password reset code for ${email}: ${code}`); return }
+        throw new HttpError(503, 'Password reset email service is not configured')
+    }
+    const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: env.MAIL_FROM, to: [email], subject: 'Your EduSphere password reset code', text: `Your EduSphere password reset code is ${code}. It expires in 10 minutes.` }) })
+    if (!response.ok) throw new HttpError(503, 'Password reset email could not be sent')
+}
 async function issueRefreshToken(userId: string) {
     const rawToken = crypto.randomBytes(48).toString('base64url')
     await pool.query('INSERT INTO refresh_sessions (user_id, token_hash, expires_at) VALUES ($1, $2, now() + interval \'30 days\')', [userId, hashToken(rawToken)])
@@ -20,7 +32,7 @@ async function issueRefreshToken(userId: string) {
 }
 
 router.post('/register', authRateLimit, asyncHandler(async (request, response) => {
-    const input = credentialsSchema.parse(request.body)
+    const input = registrationSchema.parse(request.body)
     const passwordHash = await bcrypt.hash(input.password, 12)
     const client = await pool.connect()
     try {
@@ -50,20 +62,40 @@ router.post('/login', authRateLimit, asyncHandler(async (request, response) => {
 router.post('/refresh', asyncHandler(async (request, response) => {
     const rawToken = request.cookies?.edusphere_refresh
     if (!rawToken) throw new HttpError(401, 'Refresh session not found')
-    const result = await pool.query('SELECT rs.id, rs.user_id, u.role FROM refresh_sessions rs JOIN users u ON u.id = rs.user_id WHERE rs.token_hash = $1 AND rs.revoked_at IS NULL AND rs.expires_at > now()', [hashToken(rawToken)])
+    const result = await pool.query('UPDATE refresh_sessions SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now() RETURNING user_id', [hashToken(rawToken)])
     const session = result.rows[0]
     if (!session) throw new HttpError(401, 'Refresh session expired')
-    await pool.query('UPDATE refresh_sessions SET revoked_at = now() WHERE id = $1', [session.id])
+    const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [session.user_id])
+    const user = userResult.rows[0]
+    if (!user) throw new HttpError(401, 'Refresh session expired')
     const nextToken = await issueRefreshToken(session.user_id)
     response.cookie('edusphere_refresh', nextToken, { httpOnly: true, secure: env.NODE_ENV === 'production', sameSite: env.COOKIE_SAME_SITE, maxAge: 30 * 24 * 60 * 60 * 1000 })
-    response.json({ accessToken: signAccessToken(session.user_id, session.role) })
+    response.json({ accessToken: signAccessToken(session.user_id, user.role) })
 }))
 
 router.post('/logout', asyncHandler(async (request, response) => { const token = request.cookies?.edusphere_refresh; if (token) await pool.query('UPDATE refresh_sessions SET revoked_at = now() WHERE token_hash = $1', [hashToken(token)]); response.clearCookie('edusphere_refresh', { httpOnly: true, secure: env.NODE_ENV === 'production', sameSite: env.COOKIE_SAME_SITE }); response.status(204).send() }))
 
 router.post('/verify-email', asyncHandler(async (request, response) => { const token = z.string().min(32).parse(request.body.token); const result = await pool.query("UPDATE auth_tokens SET consumed_at = now() WHERE token_hash = $1 AND purpose = 'email-verification' AND consumed_at IS NULL AND expires_at > now() RETURNING user_id", [hashToken(token)]); if (!result.rowCount) throw new HttpError(400, 'Invalid or expired verification token'); await pool.query('UPDATE users SET email_verified_at = coalesce(email_verified_at, now()), status = \'active\' WHERE id = $1', [result.rows[0].user_id]); response.json({ message: 'Email verified' }) }))
 
-router.post('/forgot-password', authRateLimit, asyncHandler(async (request, response) => { const email = z.string().email().transform((value) => value.toLowerCase()).parse(request.body.email); const result = await pool.query('SELECT id FROM users WHERE email = $1', [email]); if (result.rows[0]) { const token = crypto.randomBytes(32).toString('base64url'); await pool.query("INSERT INTO auth_tokens (user_id, token_hash, purpose, expires_at) VALUES ($1, $2, 'password-reset', now() + interval '30 minutes')", [result.rows[0].id, hashToken(token)]); } response.json({ message: 'If an account exists, reset instructions have been sent.' }) }))
+router.post('/forgot-password', authRateLimit, asyncHandler(async (request, response) => {
+    const input = passwordResetRequestSchema.parse(request.body)
+    const result = await pool.query('SELECT id FROM users WHERE email = $1 AND lower(trim(full_name)) = lower(trim($2))', [input.email, input.fullName])
+    if (result.rows[0]) {
+        const code = createVerificationCode()
+        await pool.query("UPDATE auth_tokens SET consumed_at = now() WHERE user_id = $1 AND purpose = 'password-reset-code' AND consumed_at IS NULL", [result.rows[0].id])
+        await pool.query("INSERT INTO auth_tokens (user_id, token_hash, purpose, expires_at) VALUES ($1, $2, 'password-reset-code', now() + interval '10 minutes')", [result.rows[0].id, hashToken(code)])
+        await sendPasswordResetCode(input.email, code)
+    }
+    response.json({ message: 'If the email and name match an account, a verification code has been sent.' })
+}))
+router.post('/verify-password-code', authRateLimit, asyncHandler(async (request, response) => {
+    const input = passwordCodeSchema.parse(request.body)
+    const result = await pool.query("UPDATE auth_tokens SET consumed_at = now() WHERE token_hash = $1 AND purpose = 'password-reset-code' AND consumed_at IS NULL AND expires_at > now() AND user_id = (SELECT id FROM users WHERE email = $2 AND lower(trim(full_name)) = lower(trim($3))) RETURNING user_id", [hashToken(input.code), input.email, input.fullName])
+    if (!result.rowCount) throw new HttpError(400, 'Invalid or expired verification code')
+    const resetToken = crypto.randomBytes(32).toString('base64url')
+    await pool.query("INSERT INTO auth_tokens (user_id, token_hash, purpose, expires_at) VALUES ($1, $2, 'password-reset', now() + interval '10 minutes')", [result.rows[0].user_id, hashToken(resetToken)])
+    response.json({ resetToken })
+}))
 router.post('/reset-password', authRateLimit, asyncHandler(async (request, response) => { const input = z.object({ token: z.string().min(32), password: passwordSchema }).parse(request.body); const passwordHash = await bcrypt.hash(input.password, 12); const result = await pool.query("UPDATE auth_tokens SET consumed_at = now() WHERE token_hash = $1 AND purpose = 'password-reset' AND consumed_at IS NULL AND expires_at > now() RETURNING user_id", [hashToken(input.token)]); if (!result.rowCount) throw new HttpError(400, 'Invalid or expired reset token'); await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, result.rows[0].user_id]); await pool.query('UPDATE refresh_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [result.rows[0].user_id]); response.json({ message: 'Password reset successfully' }) }))
 
 export default router

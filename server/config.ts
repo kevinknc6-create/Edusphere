@@ -12,6 +12,7 @@ const envSchema = z.object({
     AI_API_KEY: z.string().min(1).optional(),
     AI_API_URL: z.string().url().default('https://api.openai.com/v1/chat/completions'),
     AI_MODEL: z.string().min(1).default('gpt-4o-mini'),
+    RESEND_API_KEY: z.string().min(1).optional(),
+    MAIL_FROM: z.string().email().default('EduSphere <onboarding@resend.dev>'),
 })
-
 export const env = envSchema.parse(process.env)

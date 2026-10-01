@@ -10,9 +10,11 @@ import aiRoutes from './routes/ai.js'
 import teacherRoutes from './routes/teacher.js'
 import { applySecurity } from './middleware/security.js'
 import { errorHandler, notFound } from './middleware/errors.js'
+import { env } from './config.js'
 
 export function createApp() {
     const app = express()
+    if (env.NODE_ENV === 'production') app.set('trust proxy', 1)
     app.use((request, response, next) => { response.setHeader('x-request-id', request.headers['x-request-id'] || crypto.randomUUID()); next() })
     applySecurity(app)
     app.use(express.json({ limit: '1mb' }))

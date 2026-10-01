@@ -46,7 +46,6 @@ const initialTeacherCourses: TeacherCourse[] = [{ id: 1, title: 'Algebra foundat
 
 function App() {
     const [view, setView] = useState<View>('dashboard')
-    const [authMode, setAuthMode] = useState<AuthMode>('login')
     const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem('edusphere-auth') === 'true' && Boolean(getAccessToken()))
     const [currentUser, setCurrentUser] = useState<ApiSession['user'] | null>(() => getStoredUser())
     const [availableCourses, setAvailableCourses] = useState<Course[]>(courses)
@@ -68,26 +67,17 @@ function App() {
     const [role, setRole] = useState<AppRole>(() => (localStorage.getItem('edusphere-role') as AppRole) || 'student')
     const [adminTab, setAdminTab] = useState('Overview')
     const [isBooting, setIsBooting] = useState(true)
-    const [isEducationChecked, setIsEducationChecked] = useState(false)
-    const [needsEducationSetup, setNeedsEducationSetup] = useState(false)
+    const [showEducationOnboarding, setShowEducationOnboarding] = useState(false)
 
     useEffect(() => { document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'; localStorage.setItem('edusphere-theme', darkMode ? 'dark' : 'light') }, [darkMode])
     useEffect(() => { if (isAuthenticated) localStorage.setItem('edusphere-auth', 'true'); else localStorage.removeItem('edusphere-auth') }, [isAuthenticated])
     useEffect(() => { localStorage.setItem('edusphere-role', role) }, [role])
     useEffect(() => {
-        if (!isAuthenticated) { setIsEducationChecked(false); setNeedsEducationSetup(false); return }
-        if (currentUser?.role !== 'student') { setIsEducationChecked(true); setNeedsEducationSetup(false); return }
+        if (!isAuthenticated) { setEducationProfile(null); return }
+        if (currentUser?.role !== 'student') return
         api.educationProfile().then((result) => {
-            const profile = result.data
-            setEducationProfile(profile)
-            const complete = Boolean(profile?.education_level_id && (profile.grade_id || profile.program_id))
-            setNeedsEducationSetup(!complete)
-            setIsEducationChecked(true)
-        }).catch(() => {
-            // Keep existing access if an older deployment has not applied the additive migration yet.
-            setNeedsEducationSetup(localStorage.getItem('edusphere-education-profile-complete') !== 'true')
-            setIsEducationChecked(true)
-        })
+            setEducationProfile(result.data)
+        }).catch(() => setEducationProfile(null))
     }, [isAuthenticated, currentUser?.id, currentUser?.role])
     useEffect(() => {
         if (!isAuthenticated || currentUser?.role !== 'student') return
@@ -122,8 +112,9 @@ function App() {
     }, [isAuthenticated])
     useEffect(() => { const timer = window.setTimeout(() => setIsBooting(false), 280); return () => window.clearTimeout(timer) }, [])
 
-    async function logout() { try { await api.logout() } finally { setCurrentUser(null); setIsAuthenticated(false); setRole('student'); setNeedsEducationSetup(false); setIsEducationChecked(false); setView('dashboard') } }
+    async function logout() { try { await api.logout() } finally { setCurrentUser(null); setIsAuthenticated(false); setRole('student'); setShowEducationOnboarding(false); setView('dashboard') } }
     async function changeLearningPath() {
+        setShowEducationOnboarding(true)
         try {
             await api.resetEducationProfile()
             setEducationProfile(null)
@@ -134,14 +125,12 @@ function App() {
             localStorage.removeItem('edusphere-education-level')
             localStorage.removeItem('edusphere-education-grade')
             localStorage.removeItem('edusphere-education-program')
-            setNeedsEducationSetup(true)
         } catch { /* Keep the current learning path when reset fails. */ }
     }
 
-    if (!isAuthenticated) return <HtmlLoginScreen mode={authMode} onModeChange={setAuthMode} onSuccess={(session) => { setCurrentUser(session.user); setRole(session.user.role); setIsAuthenticated(true) }} />
+    if (!isAuthenticated) return <HtmlLoginScreen onSuccess={(session) => { setCurrentUser(session.user); setRole(session.user.role); setIsAuthenticated(true) }} />
     if (isBooting) return <LoadingScreen />
-    if (!isEducationChecked) return <LoadingScreen />
-    if (needsEducationSetup) return <EducationOnboarding onComplete={() => { api.educationProfile().then((result) => setEducationProfile(result.data)).catch(() => undefined); setNeedsEducationSetup(false) }} />
+    if (showEducationOnboarding) return <EducationOnboarding onComplete={() => { api.educationProfile().then((result) => setEducationProfile(result.data)).catch(() => undefined); setShowEducationOnboarding(false) }} />
 
     const filteredCourses = availableCourses.filter((course) => {
         const matchesQuery = `${course.title} ${course.category} ${course.teacher}`.toLowerCase().includes(query.toLowerCase())
@@ -274,14 +263,87 @@ void AuthScreen
 function ApiAuthScreen({ mode, onModeChange, onSuccess }: { mode: AuthMode; onModeChange: (mode: AuthMode) => void; onSuccess: (session: ApiSession) => void }) {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+    const [confirmPassword, setConfirmPassword] = useState('')
     const [fullName, setFullName] = useState('')
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState('')
     const [message, setMessage] = useState('')
     const [submitting, setSubmitting] = useState(false)
     const [isAnimationComplete, setIsAnimationComplete] = useState(false)
-    async function submit(event: FormEvent) { event.preventDefault(); setError(''); setMessage(''); setSubmitting(true); try { if (mode === 'login') { const session = await api.login({ email, password }); onSuccess(session) } else { const result = await api.register({ email, password, fullName }); setMessage(result.message) } } catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to reach the server') } finally { setSubmitting(false) } }
-    return <div className={`auth-shell auth-scene ${isAnimationComplete ? 'is-animation-complete' : ''}`}><div className="auth-visual"><LoginImpactScene onReveal={() => setIsAnimationComplete(true)} /><div className="brand"><span className="brand-mark"><Sparkles size={18} /></span><span>Edu<span>Sphere</span></span></div><div className="auth-quote"><Sparkles size={22} /><h1>Make learning<br /><em>your superpower.</em></h1><p>Your account, progress, and learning community in one secure place.</p></div><div className="auth-orbit" /></div><main className="auth-form-wrap"><div className={`auth-form ${isAnimationComplete ? 'is-revealed' : ''}`}><div className="mobile-auth-brand brand"><span className="brand-mark"><Sparkles size={18} /></span><span>Edu<span>Sphere</span></span></div><div className="auth-heading"><p className="eyebrow">{mode === 'login' ? 'Welcome back' : 'Start learning today'}</p><h2>{mode === 'login' ? 'Sign in to your account' : 'Create your student account'}</h2><p>{mode === 'login' ? 'Continue your learning journey right where you left off.' : 'Your secure learning profile starts here.'}</p></div>{error && <div className="auth-error" role="alert"><X size={15} /> {error}</div>}{message && <div className="auth-message" role="status"><CheckCircle2 size={15} /> {message}</div>}<form onSubmit={submit}>{mode === 'register' && <label>Full name<input required value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name" /></label>}<label>Email address<input required value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="you@example.com" autoComplete="email" /></label><label>Password<div className="password-input"><input required minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} type={showPassword ? 'text' : 'password'} placeholder="Enter your password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /><button type="button" className="password-toggle" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>{mode === 'login' && <span className="forgot-row"><button className="forgot-link" type="button" onClick={() => setMessage('Use the password reset link from the API to recover your account.')}>Forgot your password?</button></span>}</label><button className="primary-button auth-submit" disabled={submitting} type="submit"><span className="auth-spinner" aria-hidden="true" />{submitting ? 'Connecting...' : mode === 'login' ? <><LogIn size={16} /> Sign in</> : <><Plus size={16} /> Create account</>}</button></form><p className="auth-switch">{mode === 'login' ? "Don't have an account?" : 'Already have an account?'} <button type="button" onClick={() => { onModeChange(mode === 'login' ? 'register' : 'login'); setError(''); setMessage('') }}>{mode === 'login' ? 'Create one' : 'Sign in'}</button></p><p className="secure-note"><LockKeyhole size={13} /> Secure connection · EduSphere authentication</p></div></main></div>
+    const passwordScore = [password.length >= 12, /[a-z]/.test(password) && /[A-Z]/.test(password), /\d/.test(password), /[^A-Za-z0-9]/.test(password), password.length >= 16].filter(Boolean).length
+    const strength = passwordScore >= 5 ? 'strong' : passwordScore >= 4 ? 'good' : passwordScore >= 2 ? 'fair' : passwordScore > 0 ? 'weak' : 'empty'
+
+    async function submit(event: FormEvent) {
+        event.preventDefault()
+        setError('')
+        setMessage('')
+        if (mode === 'register' && password.length < 12) {
+            setError('Use a password with at least 12 characters.')
+            return
+        }
+        if (mode === 'register' && password !== confirmPassword) {
+            setError('Your passwords do not match.')
+            return
+        }
+        setSubmitting(true)
+        try {
+            if (mode === 'login') {
+                const session = await api.login({ email: email.trim(), password })
+                onSuccess(session)
+            } else {
+                const result = await api.register({ email: email.trim(), password, fullName: fullName.trim() })
+                setMessage(result.message)
+                setPassword('')
+                setConfirmPassword('')
+            }
+        } catch (caught) {
+            setError(caught instanceof Error ? caught.message : 'Unable to reach the server')
+        } finally {
+            setSubmitting(false)
+        }
+    }
+
+    function switchMode() {
+        onModeChange(mode === 'login' ? 'register' : 'login')
+        setError('')
+        setMessage('')
+        setPassword('')
+        setConfirmPassword('')
+    }
+
+    return <div className={`auth-shell auth-scene ${isAnimationComplete ? 'is-animation-complete' : ''}`}>
+        <div className="auth-visual">
+            <LoginImpactScene onReveal={() => setIsAnimationComplete(true)} />
+            <div className="brand"><span className="brand-mark"><Sparkles size={18} /></span><span>Edu<span>Sphere</span></span></div>
+            <div className="auth-quote"><Sparkles size={22} /><h1>Make learning<br /><em>your superpower.</em></h1><p>Your account, progress, and learning community in one secure place.</p></div>
+            <div className="auth-orbit" />
+        </div>
+        <main className="auth-form-wrap">
+            <div className={`auth-form ${isAnimationComplete ? 'is-revealed' : ''}`}>
+                <div className="mobile-auth-brand brand"><span className="brand-mark"><Sparkles size={18} /></span><span>Edu<span>Sphere</span></span></div>
+                <div className="auth-heading">
+                    <p className="eyebrow">{mode === 'login' ? 'Welcome back' : 'Start learning today'}</p>
+                    <h2>{mode === 'login' ? 'Sign in to your account' : 'Create your student account'}</h2>
+                    <p>{mode === 'login' ? 'Continue your learning journey right where you left off.' : 'Your secure learning profile starts here.'}</p>
+                </div>
+                {error && <div className="auth-error" role="alert"><X size={15} /> {error}</div>}
+                {message && <div className="auth-message" role="status"><CheckCircle2 size={15} /> {message}</div>}
+                <form onSubmit={submit}>
+                    {mode === 'register' && <label>Full name<input required minLength={2} maxLength={120} value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="e.g. Aline Uwase" autoComplete="name" /></label>}
+                    <label>Email address<input required value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="you@example.com" autoComplete="email" /></label>
+                    <label>Password
+                        <div className="password-input"><input required minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} type={showPassword ? 'text' : 'password'} placeholder="At least 12 characters" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /><button type="button" className="password-toggle" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>
+                        {mode === 'register' && <div className="auth-password-feedback"><span>Use 12+ characters and mix letter cases, numbers, or symbols.</span><div className={`auth-password-meter strength-${strength}`} role="progressbar" aria-label="Password strength" aria-valuemin={0} aria-valuemax={5} aria-valuenow={passwordScore}>{Array.from({ length: 5 }, (_, index) => <i key={index} className={index < passwordScore ? 'filled' : ''} />)}</div><small>{password ? `${strength[0].toUpperCase()}${strength.slice(1)} password` : 'Password strength'}</small></div>}
+                    </label>
+                    {mode === 'register' && <label>Confirm password<input required minLength={12} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type={showPassword ? 'text' : 'password'} placeholder="Enter your password again" autoComplete="new-password" /></label>}
+                    {mode === 'login' && <span className="forgot-row"><button className="forgot-link" type="button" onClick={() => setMessage('Use the password reset link from the API to recover your account.')}>Forgot your password?</button></span>}
+                    <button className="primary-button auth-submit" disabled={submitting} type="submit"><span className="auth-spinner" aria-hidden="true" />{submitting ? 'Connecting...' : mode === 'login' ? <><LogIn size={16} /> Sign in</> : <><Plus size={16} /> Create account</>}</button>
+                </form>
+                <p className="auth-switch">{mode === 'login' ? "Don't have an account?" : 'Already have an account?'} <button type="button" onClick={switchMode}>{mode === 'login' ? 'Create one' : 'Sign in'}</button></p>
+                <p className="secure-note"><LockKeyhole size={13} /> Secure connection | EduSphere authentication</p>
+            </div>
+        </main>
+    </div>
 }
 
 void ApiAuthScreen

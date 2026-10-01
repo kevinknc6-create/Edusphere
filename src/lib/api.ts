@@ -21,7 +21,7 @@ export function setAccessToken(token: string | null) { accessToken = token; if (
 export function getAccessToken() { return accessToken }
 const USER_SESSION_KEY = 'edusphere-user-session'
 export function getStoredUser(): ApiSession['user'] | null { const stored = sessionStorage.getItem(USER_SESSION_KEY); return stored ? JSON.parse(stored) as ApiSession['user'] : null }
-function setStoredUser(user: ApiSession['user'] | null) { if (user) sessionStorage.setItem(USER_SESSION_KEY, JSON.stringify(user)); else sessionStorage.removeItem(USER_SESSION_KEY) }
+export function setStoredUser(user: ApiSession['user'] | null) { if (user) sessionStorage.setItem(USER_SESSION_KEY, JSON.stringify(user)); else sessionStorage.removeItem(USER_SESSION_KEY) }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
     const headers = new Headers(init.headers)
