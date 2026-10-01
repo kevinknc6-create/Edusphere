@@ -73,7 +73,7 @@
     let cur = 0, target = 0, raf = 0, last = 0;
     let duration = 0, endT = 5.11, ready = false, failed = false;   // endT: sane default so the panel is reachable even if the clip never loads
     let lastSeek = -1, pendingSeek = null, unlocking = false;
-    let isLive = false, lastPos = '', currentSrc = '', srcToken = 0, objUrl = '';
+    let isLive = false, lastPos = '', currentSrc = '';
     let lockY = 0, unlocked = false;   // pins the panel open while typing, until the user scrolls away on purpose
     let staticMode = reduceMQ.matches;
 
@@ -95,23 +95,10 @@
       loadSource(src);
     }
 
-    // The clip is small (~2 MB), so load it into memory: a blob URL is always seekable,
-    // even on servers that don't answer HTTP Range requests. Falls back to a plain src.
-    async function loadSource(src) {
-      const token = ++srcToken;
-      let url = src;
-      try {
-        const res = await fetch(src);
-        if (!res.ok) throw new Error(String(res.status));
-        const blob = await res.blob();
-        if (token !== srcToken) return;
-        url = URL.createObjectURL(blob);
-      } catch (e) {
-        if (token !== srcToken) return;
-      }
-      if (objUrl) URL.revokeObjectURL(objUrl);
-      objUrl = url !== src ? url : '';
-      video.src = url;
+    // Let the browser stream the clip and issue byte-range requests. This shows the poster
+    // immediately and avoids waiting for the entire video before the first frame can render.
+    function loadSource(src) {
+      video.src = src;
       video.load();
     }
 
@@ -301,7 +288,6 @@
       destroy() {
         cancelAnimationFrame(raf);
         cleanups.forEach((f) => f());
-        srcToken++; if (objUrl) URL.revokeObjectURL(objUrl);
         video.removeAttribute('src'); video.load();
         delete root.__esl;
       },
