@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/auth.js'
 
 const router = Router()
 const id = z.string().uuid()
+const teacherContentType = z.enum(['courses', 'modules', 'lessons', 'notes', 'examples', 'exercises', 'assignments', 'quizzes', 'tests', 'exams'])
 const questionInput = z.object({ type: z.enum(['multiple-choice', 'true-false', 'fill-blank', 'matching', 'short-answer', 'programming']), prompt: z.string().min(1).max(4000), explanation: z.string().max(4000).default(''), marks: z.number().int().positive().default(1), position: z.number().int().nonnegative().optional(), options: z.array(z.object({ text: z.string().min(1).max(500), correct: z.boolean().default(false) })).default([]) })
 router.use(requireAuth)
 router.use((request, _response, next) => request.auth?.role === 'teacher' ? next() : next(new HttpError(403, 'Teacher access required')))
@@ -46,6 +47,51 @@ router.get('/profile', asyncHandler(async (request, response) => {
         FROM users u JOIN teachers t ON t.user_id = u.id LEFT JOIN subject_teachers st ON st.teacher_id = u.id LEFT JOIN subjects s ON s.id = st.subject_id LEFT JOIN courses c ON c.teacher_id = u.id
         WHERE u.id = $1 GROUP BY u.id, t.bio, t.teacher_verification_status`, [request.auth!.userId])
     response.json({ data: result.rows[0] || null })
+}))
+
+const ownedContentQueries: Record<z.infer<typeof teacherContentType>, string> = {
+    courses: `SELECT c.id, c.title, c.description, c.difficulty, c.status, c.education_level_id, c.grade_id, c.program_id, s.name AS subject, count(DISTINCT l.id)::int AS lessons, count(DISTINCT e.student_id)::int AS students FROM courses c JOIN subjects s ON s.id = c.subject_id LEFT JOIN modules m ON m.course_id = c.id LEFT JOIN lessons l ON l.module_id = m.id LEFT JOIN enrollments e ON e.course_id = c.id WHERE c.teacher_id = $1 GROUP BY c.id, s.name ORDER BY c.updated_at DESC`,
+    modules: `SELECT m.id, m.course_id, m.title, m.position, m.status, c.title AS course FROM modules m JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $1 ORDER BY c.title, m.position`,
+    lessons: `SELECT l.id, l.module_id, l.title, l.content, l.duration_minutes, l.position, l.status, m.title AS module, c.title AS course FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $1 ORDER BY c.title, m.position, l.position`,
+    notes: `SELECT n.id, n.lesson_id, n.title, n.body, n.status, l.title AS lesson, c.title AS course FROM lesson_notes n JOIN lessons l ON l.id = n.lesson_id JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $1 ORDER BY n.updated_at DESC`,
+    examples: `SELECT e.id, e.lesson_id, e.title, e.body, e.status, l.title AS lesson, c.title AS course FROM lesson_examples e JOIN lessons l ON l.id = e.lesson_id JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $1 ORDER BY e.updated_at DESC`,
+    exercises: `SELECT e.id, e.lesson_id, e.prompt, e.answer, e.status, l.title AS lesson, c.title AS course FROM lesson_exercises e JOIN lessons l ON l.id = e.lesson_id JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $1 ORDER BY e.updated_at DESC`,
+    assignments: `SELECT a.id, a.course_id, a.title, a.instructions, a.due_at, a.total_marks, a.status, c.title AS course FROM assignments a JOIN courses c ON c.id = a.course_id WHERE a.teacher_id = $1 ORDER BY a.due_at`,
+    quizzes: `SELECT q.id, q.course_id, q.lesson_id, q.title, q.time_limit_seconds, q.status, c.title AS course FROM quizzes q JOIN courses c ON c.id = q.course_id WHERE c.teacher_id = $1 ORDER BY q.title`,
+    tests: `SELECT t.id, t.course_id, t.title, t.instructions, t.time_limit_seconds, t.status, c.title AS course FROM tests t JOIN courses c ON c.id = t.course_id WHERE c.teacher_id = $1 ORDER BY t.title`,
+    exams: `SELECT e.id, e.course_id, e.title, e.time_limit_seconds, e.status, c.title AS course FROM exams e JOIN courses c ON c.id = e.course_id WHERE c.teacher_id = $1 ORDER BY e.title`,
+}
+
+router.get('/content/:type', asyncHandler(async (request, response) => {
+    const type = teacherContentType.parse(request.params.type)
+    const result = await pool.query(ownedContentQueries[type], [request.auth!.userId])
+    response.json({ data: result.rows })
+}))
+
+router.post('/content/:type', requireTeacherPermission('content.create'), asyncHandler(async (request, response) => {
+    const type = z.enum(['notes', 'examples', 'exercises']).parse(request.params.type)
+    const body = request.body as Record<string, unknown>
+    const lessonId = id.parse(body.lessonId)
+    const ownership = await pool.query('SELECT l.id FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE l.id = $1 AND c.teacher_id = $2', [lessonId, request.auth!.userId])
+    if (!ownership.rows[0]) throw new HttpError(404, 'Lesson not found')
+    const result = type === 'notes'
+        ? await pool.query('INSERT INTO lesson_notes (lesson_id, title, body, status, created_by) VALUES ($1, $2, $3, \'draft\', $4) RETURNING *', [lessonId, z.string().max(240).default('').parse(body.title), z.string().min(1).parse(body.body), request.auth!.userId])
+        : type === 'examples'
+            ? await pool.query('INSERT INTO lesson_examples (lesson_id, title, body, status, created_by) VALUES ($1, $2, $3, \'draft\', $4) RETURNING *', [lessonId, z.string().max(240).default('').parse(body.title), z.string().min(1).parse(body.body), request.auth!.userId])
+            : await pool.query('INSERT INTO lesson_exercises (lesson_id, prompt, answer, status, created_by) VALUES ($1, $2, $3, \'draft\', $4) RETURNING *', [lessonId, z.string().min(1).parse(body.prompt), z.string().max(4000).default('').parse(body.answer), request.auth!.userId])
+    response.status(201).json({ data: result.rows[0] })
+}))
+
+router.patch('/content/:type/:contentId/status', requireTeacherPermission('content.publish'), asyncHandler(async (request, response) => {
+    const type = teacherContentType.parse(request.params.type)
+    const contentId = id.parse(request.params.contentId)
+    const nextStatus = z.enum(['draft', 'pending', 'published', 'archived']).parse(request.body.status)
+    const table = { courses: 'courses', modules: 'modules', lessons: 'lessons', notes: 'lesson_notes', examples: 'lesson_examples', exercises: 'lesson_exercises', assignments: 'assignments', quizzes: 'quizzes', tests: 'tests', exams: 'exams' }[type]
+    const ownershipSql = { courses: 'teacher_id = $3', modules: 'course_id IN (SELECT id FROM courses WHERE teacher_id = $3)', lessons: 'module_id IN (SELECT m.id FROM modules m JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $3)', notes: 'lesson_id IN (SELECT l.id FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $3)', examples: 'lesson_id IN (SELECT l.id FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $3)', exercises: 'lesson_id IN (SELECT l.id FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $3)', assignments: 'teacher_id = $3', quizzes: 'course_id IN (SELECT id FROM courses WHERE teacher_id = $3)', tests: 'course_id IN (SELECT id FROM courses WHERE teacher_id = $3)', exams: 'course_id IN (SELECT id FROM courses WHERE teacher_id = $3)' }[type]
+    const result = await pool.query(`UPDATE ${table} SET status = $1 WHERE id = $2 AND ${ownershipSql} RETURNING *`, [nextStatus, contentId, request.auth!.userId])
+    if (!result.rows[0]) throw new HttpError(404, 'Owned content not found')
+    if (['quizzes', 'tests', 'exams'].includes(type)) await pool.query(`UPDATE ${table} SET published = $1 WHERE id = $2`, [nextStatus === 'published', contentId])
+    response.json({ data: result.rows[0] })
 }))
 async function insertQuestion(table: 'questions' | 'test_questions' | 'exam_questions', answerTable: 'answers' | 'test_answers' | 'exam_answers', ownerColumn: 'quiz_id' | 'test_id' | 'exam_id', ownerId: string, input: z.infer<typeof questionInput>) {
     const question = await pool.query(`INSERT INTO ${table} (${ownerColumn}, type, prompt, explanation, marks, position) VALUES ($1, $2, $3, $4, $5, COALESCE($6, (SELECT COALESCE(max(position), -1) + 1 FROM ${table} WHERE ${ownerColumn} = $1))) RETURNING id, type, prompt, explanation, marks, position`, [ownerId, input.type, input.prompt, input.explanation, input.marks, input.position ?? null])
