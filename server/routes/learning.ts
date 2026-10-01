@@ -5,6 +5,20 @@ import { asyncHandler } from '../errors.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
 
 const router = Router()
+router.use(requireAuth)
+
+async function studentProfile(userId: string) {
+    const result = await pool.query('SELECT education_level_id, grade_id, program_id FROM students WHERE user_id = $1', [userId])
+    return result.rows[0] || null
+}
+
+async function canStudentSeeCourse(courseId: string, userId: string) {
+    const profile = await studentProfile(userId)
+    if (!profile?.education_level_id) return false
+    const result = await pool.query(`SELECT 1 FROM courses c WHERE c.id = $1 AND c.status = 'published' AND c.education_level_id = $2 AND c.grade_id IS NOT DISTINCT FROM $3::uuid AND c.program_id IS NOT DISTINCT FROM $4::uuid`, [courseId, profile.education_level_id, profile.grade_id, profile.program_id])
+    return Boolean(result.rows[0])
+}
+
 router.get('/subjects', asyncHandler(async (_request, response) => { const result = await pool.query('SELECT id, name, description FROM subjects ORDER BY name'); response.json({ data: result.rows }) }))
 router.get('/taxonomy', asyncHandler(async (_request, response) => {
     const [levels, grades, faculties, programs] = await Promise.all([
@@ -34,18 +48,33 @@ router.get('/courses', asyncHandler(async (request, response) => {
     const level = z.string().uuid().optional().parse(request.query.level)
     const grade = z.string().uuid().optional().parse(request.query.grade)
     const program = z.string().uuid().optional().parse(request.query.program)
-    const result = await pool.query(`SELECT c.id, c.title, c.description, c.difficulty, c.status, c.education_level_id, c.grade_id, c.program_id, s.name AS subject, u.full_name AS teacher FROM courses c JOIN subjects s ON s.id = c.subject_id JOIN users u ON u.id = c.teacher_id WHERE c.status = 'published' AND ($1::text IS NULL OR c.title ILIKE $2 OR c.description ILIKE $2 OR s.name ILIKE $2) AND ($3::uuid IS NULL OR c.education_level_id = $3) AND ($4::uuid IS NULL OR c.grade_id = $4) AND ($5::uuid IS NULL OR c.program_id = $5) ORDER BY c.created_at DESC`, [search || null, search ? `%${search}%` : null, level || null, grade || null, program || null])
+    const profile = await studentProfile(request.auth!.userId)
+    if (request.auth!.role === 'student' && !profile?.education_level_id) { response.json({ data: [] }); return }
+    const effectiveLevel = request.auth!.role === 'student' ? profile?.education_level_id || null : level || null
+    const effectiveGrade = request.auth!.role === 'student' ? profile?.grade_id || null : grade || null
+    const effectiveProgram = request.auth!.role === 'student' ? profile?.program_id || null : program || null
+    const scopeSql = request.auth!.role === 'student' ? 'AND c.education_level_id = $3 AND c.grade_id IS NOT DISTINCT FROM $4::uuid AND c.program_id IS NOT DISTINCT FROM $5::uuid' : 'AND ($3::uuid IS NULL OR c.education_level_id = $3) AND ($4::uuid IS NULL OR c.grade_id = $4) AND ($5::uuid IS NULL OR c.program_id = $5)'
+    const result = await pool.query(`SELECT c.id, c.title, c.description, c.difficulty, c.status, c.education_level_id, c.grade_id, c.program_id, count(l.id)::int AS lessons, s.name AS subject, u.full_name AS teacher FROM courses c JOIN subjects s ON s.id = c.subject_id JOIN users u ON u.id = c.teacher_id LEFT JOIN modules m ON m.course_id = c.id AND m.status = 'published' LEFT JOIN lessons l ON l.module_id = m.id AND l.status = 'published' WHERE c.status = 'published' AND ($1::text IS NULL OR c.title ILIKE $2 OR c.description ILIKE $2 OR s.name ILIKE $2) ${scopeSql} GROUP BY c.id, s.name, u.full_name ORDER BY c.created_at DESC`, [search || null, search ? `%${search}%` : null, effectiveLevel, effectiveGrade, effectiveProgram])
     response.json({ data: result.rows })
 }))
 router.get('/courses/:id', asyncHandler(async (request, response) => {
+    const profile = request.auth!.role === 'student' ? await studentProfile(request.auth!.userId) : null
+    if (request.auth!.role === 'student' && !profile?.education_level_id) { response.json({ data: null }); return }
+    const scopeSql = request.auth!.role === 'student' ? 'AND c.education_level_id = $2 AND c.grade_id IS NOT DISTINCT FROM $3::uuid AND c.program_id IS NOT DISTINCT FROM $4::uuid' : 'AND ($2::uuid IS NULL OR c.education_level_id = $2) AND ($3::uuid IS NULL OR c.grade_id = $3) AND ($4::uuid IS NULL OR c.program_id = $4)'
     const [course, modules] = await Promise.all([
-        pool.query('SELECT c.*, s.name AS subject, u.full_name AS teacher FROM courses c JOIN subjects s ON s.id = c.subject_id JOIN users u ON u.id = c.teacher_id WHERE c.id = $1 AND c.status = \'published\'', [request.params.id]),
-        pool.query('SELECT m.id, m.title, m.position, COALESCE(json_agg(json_build_object(\'id\', l.id, \'title\', l.title, \'content\', l.content, \'durationMinutes\', l.duration_minutes, \'position\', l.position) ORDER BY l.position) FILTER (WHERE l.id IS NOT NULL), \'[]\') AS lessons FROM modules m LEFT JOIN lessons l ON l.module_id = m.id WHERE m.course_id = $1 GROUP BY m.id ORDER BY m.position', [request.params.id]),
+        pool.query(`SELECT c.*, s.name AS subject, u.full_name AS teacher FROM courses c JOIN subjects s ON s.id = c.subject_id JOIN users u ON u.id = c.teacher_id WHERE c.id = $1 AND c.status = 'published' ${scopeSql}`, [request.params.id, profile?.education_level_id || null, profile?.grade_id || null, profile?.program_id || null]),
+        pool.query(`SELECT m.id, m.title, m.position, COALESCE(json_agg(json_build_object('id', l.id, 'title', l.title, 'content', l.content || jsonb_build_object(
+            'notes', (SELECT COALESCE(json_agg(json_build_object('id', n.id, 'title', n.title, 'body', n.body) ORDER BY n.created_at), '[]') FROM lesson_notes n WHERE n.lesson_id = l.id AND n.status = 'published'),
+            'examples', (SELECT COALESCE(json_agg(json_build_object('id', e.id, 'title', e.title, 'body', e.body) ORDER BY e.created_at), '[]') FROM lesson_examples e WHERE e.lesson_id = l.id AND e.status = 'published'),
+            'exercises', (SELECT COALESCE(json_agg(json_build_object('id', x.id, 'prompt', x.prompt) ORDER BY x.created_at), '[]') FROM lesson_exercises x WHERE x.lesson_id = l.id AND x.status = 'published')
+        ), 'durationMinutes', l.duration_minutes, 'position', l.position) ORDER BY l.position) FILTER (WHERE l.id IS NOT NULL), '[]') AS lessons FROM modules m LEFT JOIN lessons l ON l.module_id = m.id AND l.status = 'published' WHERE m.course_id = $1 AND m.status = 'published' GROUP BY m.id ORDER BY m.position`, [request.params.id]),
     ])
     response.json({ data: course.rows[0] ? { ...course.rows[0], modules: modules.rows } : null })
 }))
 router.use(requireAuth)
 router.get('/quizzes/:id', asyncHandler(async (request, response) => {
+    const owner = await pool.query('SELECT course_id FROM quizzes WHERE id = $1', [request.params.id])
+    if (request.auth!.role === 'student' && (!owner.rows[0] || !(await canStudentSeeCourse(owner.rows[0].course_id, request.auth!.userId)))) { response.json({ data: null }); return }
     const result = await pool.query(`
         SELECT q.id, q.title, q.time_limit_seconds, q.course_id, q.lesson_id,
                COALESCE(json_agg(json_build_object(
@@ -60,6 +89,8 @@ router.get('/quizzes/:id', asyncHandler(async (request, response) => {
     response.json({ data: result.rows[0] || null })
 }))
 router.get('/exams/:id', asyncHandler(async (request, response) => {
+    const owner = await pool.query('SELECT course_id FROM exams WHERE id = $1', [request.params.id])
+    if (request.auth!.role === 'student' && (!owner.rows[0] || !(await canStudentSeeCourse(owner.rows[0].course_id, request.auth!.userId)))) { response.json({ data: null }); return }
     const result = await pool.query(`
         SELECT e.id, e.title, e.time_limit_seconds, e.course_id,
                COALESCE(json_agg(json_build_object(
@@ -74,6 +105,8 @@ router.get('/exams/:id', asyncHandler(async (request, response) => {
     response.json({ data: result.rows[0] || null })
 }))
 router.get('/tests/:id', asyncHandler(async (request, response) => {
+    const owner = await pool.query('SELECT course_id FROM tests WHERE id = $1', [request.params.id])
+    if (request.auth!.role === 'student' && (!owner.rows[0] || !(await canStudentSeeCourse(owner.rows[0].course_id, request.auth!.userId)))) { response.json({ data: null }); return }
     const result = await pool.query(`
         SELECT t.id, t.title, t.instructions, t.time_limit_seconds, t.course_id,
                COALESCE(json_agg(json_build_object(
