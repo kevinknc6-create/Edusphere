@@ -1,8 +1,11 @@
 import { Router } from 'express'
+import bcrypt from 'bcryptjs'
+import crypto from 'node:crypto'
 import { z } from 'zod'
 import { pool } from '../db/pool.js'
 import { asyncHandler, HttpError } from '../errors.js'
 import { requireAuth, requirePermission } from '../middleware/auth.js'
+import { issueTeacherVerificationCode } from './auth.js'
 
 const router = Router()
 const id = z.string().uuid()
@@ -58,19 +61,57 @@ router.patch('/users/:id/status', asyncHandler(async (request, response) => {
 }))
 
 router.get('/teachers', asyncHandler(async (_request, response) => {
-    const result = await pool.query(`SELECT u.id, u.email, u.full_name, u.status, t.verification_status, COALESCE(array_agg(tp.permission) FILTER (WHERE tp.permission IS NOT NULL), '{}') AS permissions
-        FROM users u JOIN teachers t ON t.user_id = u.id LEFT JOIN teacher_permissions tp ON tp.teacher_id = u.id
-        WHERE u.role = 'teacher' GROUP BY u.id, t.verification_status ORDER BY u.full_name`)
+    const result = await pool.query(`SELECT u.id, u.email, u.full_name, u.status, u.created_at, u.last_login_at, t.bio, t.teacher_verification_status, t.rejected_reason,
+        COALESCE(string_agg(DISTINCT s.name, ', ' ORDER BY s.name), '') AS subjects,
+        count(DISTINCT c.id)::int AS courses,
+        COALESCE(array_agg(DISTINCT tp.permission) FILTER (WHERE tp.permission IS NOT NULL), '{}') AS permissions
+        FROM users u JOIN teachers t ON t.user_id = u.id LEFT JOIN subject_teachers st ON st.teacher_id = u.id LEFT JOIN subjects s ON s.id = st.subject_id LEFT JOIN courses c ON c.teacher_id = u.id LEFT JOIN teacher_permissions tp ON tp.teacher_id = u.id
+        WHERE u.role = 'teacher' GROUP BY u.id, t.teacher_verification_status, t.rejected_reason, t.bio ORDER BY u.full_name`)
     response.json({ data: result.rows })
+}))
+
+router.post('/teachers', asyncHandler(async (request, response) => {
+    const input = z.object({ email: z.string().trim().email().transform((value) => value.toLowerCase()), fullName: z.string().trim().min(2).max(120), bio: z.string().max(4000).default('') }).parse(request.body)
+    const passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString('base64url'), 12)
+    const client = await pool.connect()
+    try {
+        await client.query('BEGIN')
+        const user = await client.query(`INSERT INTO users (email, password_hash, full_name, role, status, email_verified_at) VALUES ($1, $2, $3, 'teacher', 'pending', NULL) RETURNING id, email, full_name, role, status, created_at`, [input.email, passwordHash, input.fullName])
+        await client.query('INSERT INTO teachers (user_id, bio, verification_status, teacher_verification_status) VALUES ($1, $2, \'pending\', \'pending\')', [user.rows[0].id, input.bio])
+        await client.query('COMMIT')
+        await audit(request.auth!.userId, 'teacher.created', 'teacher', user.rows[0].id, { email: input.email })
+        response.status(201).json({ data: user.rows[0] })
+    } catch (error) { await client.query('ROLLBACK'); if ((error as { code?: string }).code === '23505') throw new HttpError(409, 'A user with that email already exists'); throw error } finally { client.release() }
+}))
+
+async function updateTeacherStatus(actorId: string, teacherId: string, nextStatus: 'pending' | 'approved' | 'verified' | 'suspended' | 'rejected') {
+    const userStatus = nextStatus === 'suspended' || nextStatus === 'rejected' || nextStatus === 'pending' ? 'suspended' : 'active'
+    const result = await pool.query(`UPDATE teachers SET teacher_verification_status = $1, verification_status = $2, approved_by = CASE WHEN $1 IN ('approved', 'verified') THEN $3 ELSE approved_by END, approved_at = CASE WHEN $1 IN ('approved', 'verified') THEN COALESCE(approved_at, now()) ELSE approved_at END, rejected_reason = CASE WHEN $1 = 'rejected' THEN rejected_reason ELSE NULL END WHERE user_id = $4 RETURNING user_id, teacher_verification_status`, [nextStatus, userStatus === 'active' ? 'active' : userStatus === 'suspended' ? 'suspended' : 'pending', actorId, teacherId])
+    if (!result.rows[0]) throw new HttpError(404, 'Teacher not found')
+    await pool.query('UPDATE users SET status = $1 WHERE id = $2', [userStatus, teacherId])
+    await pool.query('UPDATE teacher_verification_codes SET invalidated_at = now() WHERE teacher_id = $1 AND consumed_at IS NULL AND invalidated_at IS NULL', [teacherId])
+    await audit(actorId, `teacher.${nextStatus}`, 'teacher', teacherId)
+    if (nextStatus === 'approved' || nextStatus === 'verified') await issueTeacherVerificationCode(teacherId, actorId)
+    return result.rows[0]
+}
+
+router.patch('/teachers/:id/status', asyncHandler(async (request, response) => {
+    const teacherId = id.parse(request.params.id)
+    const nextStatus = z.enum(['pending', 'approved', 'verified', 'suspended', 'rejected']).parse(request.body.status)
+    response.json({ data: await updateTeacherStatus(request.auth!.userId, teacherId, nextStatus) })
+}))
+
+router.post('/teachers/:id/resend-verification', asyncHandler(async (request, response) => {
+    const teacherId = id.parse(request.params.id)
+    await issueTeacherVerificationCode(teacherId, request.auth!.userId)
+    await audit(request.auth!.userId, 'teacher.verification_resent', 'teacher', teacherId)
+    response.json({ message: 'A new verification code was sent to the approved teacher email.' })
 }))
 
 router.patch('/teachers/:id/verification', asyncHandler(async (request, response) => {
     const teacherId = id.parse(request.params.id)
-    const verification = z.enum(['active', 'pending', 'suspended']).parse(request.body.status)
-    const result = await pool.query('UPDATE teachers SET verification_status = $1 WHERE user_id = $2 RETURNING user_id, verification_status', [verification, teacherId])
-    if (!result.rows[0]) throw new HttpError(404, 'Teacher not found')
-    await audit(request.auth!.userId, 'teacher.verification_changed', 'teacher', teacherId, { status: verification })
-    response.json({ data: result.rows[0] })
+    const verification = z.enum(['pending', 'approved', 'verified', 'suspended', 'rejected']).parse(request.body.status)
+    response.json({ data: await updateTeacherStatus(request.auth!.userId, teacherId, verification) })
 }))
 
 router.put('/teachers/:id/permissions', asyncHandler(async (request, response) => {

@@ -13,6 +13,7 @@ import LearningPath from './components/LearningPath'
 import LessonWorkspace from './components/LessonWorkspace'
 import TeacherWorkspace from './components/TeacherWorkspace'
 import AdminWorkspace from './components/AdminWorkspace'
+import TeacherLoginScreen from './components/TeacherLoginScreen'
 
 void Dashboard
 void CoursePage
@@ -61,14 +62,15 @@ function App() {
     const [assessmentMode, setAssessmentMode] = useState<AssessmentMode>('practice')
     const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(() => { const saved = localStorage.getItem('edusphere-last-result'); return saved ? JSON.parse(saved) as AssessmentResult : null })
     const [teacherTab, setTeacherTab] = useState('Overview')
-    const [role, setRole] = useState<AppRole>(() => (localStorage.getItem('edusphere-role') as AppRole) || 'student')
+    const [role, setRole] = useState<AppRole>(() => getStoredUser()?.role || 'student')
     const [adminTab, setAdminTab] = useState('Overview')
     const [isBooting, setIsBooting] = useState(true)
     const [showEducationOnboarding, setShowEducationOnboarding] = useState(false)
+    const [teacherLogin, setTeacherLogin] = useState(false)
 
     useEffect(() => { document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'; localStorage.setItem('edusphere-theme', darkMode ? 'dark' : 'light') }, [darkMode])
     useEffect(() => { if (isAuthenticated) localStorage.setItem('edusphere-auth', 'true'); else localStorage.removeItem('edusphere-auth') }, [isAuthenticated])
-    useEffect(() => { localStorage.setItem('edusphere-role', role) }, [role])
+    useEffect(() => { setRole(currentUser?.role || 'student') }, [currentUser?.role])
     useEffect(() => {
         if (!isAuthenticated) { setEducationProfile(null); return }
         if (currentUser?.role !== 'student') return
@@ -125,7 +127,7 @@ function App() {
         } catch { /* Keep the current learning path when reset fails. */ }
     }
 
-    if (!isAuthenticated) return <HtmlLoginScreen onSuccess={(session) => { setCurrentUser(session.user); setRole(session.user.role); setIsAuthenticated(true) }} />
+    if (!isAuthenticated) return teacherLogin ? <TeacherLoginScreen onBack={() => setTeacherLogin(false)} onSuccess={(session) => { setCurrentUser(session.user); setRole(session.user.role); setTeacherLogin(false); setIsAuthenticated(true) }} /> : <HtmlLoginScreen onTeacherLogin={() => setTeacherLogin(true)} onSuccess={(session) => { setCurrentUser(session.user); setRole(session.user.role); setIsAuthenticated(true) }} />
     if (isBooting) return <LoadingScreen />
     if (showEducationOnboarding) return <EducationOnboarding onComplete={() => { api.educationProfile().then((result) => setEducationProfile(result.data)).catch(() => undefined); setShowEducationOnboarding(false) }} />
 
@@ -149,8 +151,8 @@ function App() {
             {view === 'lesson' && activeCourse && <LessonWorkspace courseId={activeCourse.id} lessonId={activeLessonId} courseTitle={activeCourse.title} onBack={() => nav('course')} onAssessment={openAssessment} />}
             {view === 'assessment' && <AssessmentPage mode={assessmentMode} onBack={() => nav('course')} onSubmit={saveAssessmentResult} />}
             {view === 'results' && assessmentResult && <ResultsPage userName={currentUser?.fullName || 'Student'} result={assessmentResult} onRetry={() => openAssessment(assessmentResult.mode)} onBack={() => nav('course')} />}
-            {view === 'teacher' && <TeacherWorkspace />}
-            {view === 'admin' && canAccessAdmin(role) && <AdminWorkspace role={role} />}
+            {view === 'teacher' && currentUser?.role === 'teacher' && <TeacherWorkspace />}
+            {view === 'admin' && currentUser && canAccessAdmin(currentUser.role) && <AdminWorkspace role={currentUser.role} />}
         </main><nav className="mobile-nav" aria-label="Mobile navigation"><button className={view === 'dashboard' ? 'active' : ''} onClick={() => nav('dashboard')}><LayoutDashboard size={19} /><span>Home</span></button><button className={view === 'course' || view === 'lesson' ? 'active' : ''} onClick={() => nav('course')}><BookOpen size={19} /><span>Learn</span></button><button className={view === 'subjects' ? 'active' : ''} onClick={() => nav('subjects')}><Search size={19} /><span>Explore</span></button><button onClick={() => nav('dashboard')}><Trophy size={19} /><span>Awards</span></button></nav>
     </div>
 }

@@ -3,9 +3,10 @@ import { setAccessToken, setStoredUser, type ApiSession } from '../lib/api'
 
 type HtmlLoginScreenProps = {
     onSuccess: (session: ApiSession) => void
+    onTeacherLogin: () => void
 }
 
-export default function HtmlLoginScreen({ onSuccess }: HtmlLoginScreenProps) {
+export default function HtmlLoginScreen({ onSuccess, onTeacherLogin }: HtmlLoginScreenProps) {
     useEffect(() => {
         function handleMessage(event: MessageEvent) {
             if (event.origin !== window.location.origin || event.data?.type !== 'edusphere-auth-success') return
@@ -28,5 +29,5 @@ export default function HtmlLoginScreen({ onSuccess }: HtmlLoginScreenProps) {
         return () => window.removeEventListener('message', handleMessage)
     }, [onSuccess])
 
-    return <iframe className="html-login-iframe" title="EduSphere sign in" src="/login/index.html" />
+    return <div className="html-login-shell"><iframe className="html-login-iframe" title="EduSphere sign in" src="/login/index.html" /><button className="teacher-login-link" type="button" onClick={onTeacherLogin}>Teacher sign in</button></div>
 }

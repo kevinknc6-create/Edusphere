@@ -7809,6 +7809,25 @@
     border: 0;
 }
 
+.html-login-shell {
+    position: relative;
+    min-height: 100vh;
+    background: #050b1e;
+}
+
+.teacher-login-link {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 5;
+    border: 1px solid rgba(120, 160, 255, .35);
+    border-radius: 999px;
+    padding: 10px 16px;
+    color: #f2f6ff;
+    background: rgba(8, 18, 46, .86);
+    cursor: pointer;
+}
+
 .html-login-stage .intro-video {
     position: absolute;
     inset: 0;

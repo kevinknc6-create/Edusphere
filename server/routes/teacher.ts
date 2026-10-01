@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { pool } from '../db/pool.js'
 import { asyncHandler, HttpError } from '../errors.js'
@@ -9,6 +9,25 @@ const id = z.string().uuid()
 const questionInput = z.object({ type: z.enum(['multiple-choice', 'true-false', 'fill-blank', 'matching', 'short-answer', 'programming']), prompt: z.string().min(1).max(4000), explanation: z.string().max(4000).default(''), marks: z.number().int().positive().default(1), position: z.number().int().nonnegative().optional(), options: z.array(z.object({ text: z.string().min(1).max(500), correct: z.boolean().default(false) })).default([]) })
 router.use(requireAuth)
 router.use((request, _response, next) => request.auth?.role === 'teacher' ? next() : next(new HttpError(403, 'Teacher access required')))
+router.use((request, _response, next) => {
+    pool.query(`SELECT 1 FROM users u JOIN teachers t ON t.user_id = u.id WHERE u.id = $1 AND u.status = 'active' AND t.teacher_verification_status = 'verified'`, [request.auth!.userId])
+        .then((result) => result.rows[0] ? next() : next(new HttpError(403, 'Teacher verification is required')))
+        .catch(next)
+})
+router.use((request, _response, next) => {
+    if (request.method === 'GET') return next()
+    pool.query(`SELECT 1 FROM teacher_permissions WHERE teacher_id = $1 AND permission = ANY($2::text[])`, [request.auth!.userId, ['content.create', 'content.edit', 'content.publish', 'assessment.manage']])
+        .then((result) => result.rows[0] ? next() : next(new HttpError(403, 'Teacher permission is required')))
+        .catch(next)
+})
+
+function requireTeacherPermission(permission: string) {
+    return (request: Request, _response: Response, next: NextFunction) => {
+        pool.query('SELECT 1 FROM teacher_permissions WHERE teacher_id = $1 AND permission = $2', [request.auth!.userId, permission])
+            .then((result) => result.rows[0] ? next() : next(new HttpError(403, 'Teacher permission is required')))
+            .catch(next)
+    }
+}
 
 async function ownedCourse(courseId: string, teacherId: string) {
     const result = await pool.query('SELECT id FROM courses WHERE id = $1 AND teacher_id = $2', [courseId, teacherId])
@@ -20,6 +39,14 @@ async function ownedModule(moduleId: string, teacherId: string) {
     if (!result.rows[0]) throw new HttpError(404, 'Module not found')
     return result.rows[0]
 }
+
+router.get('/profile', asyncHandler(async (request, response) => {
+    const result = await pool.query(`SELECT u.id, u.email, u.full_name, u.created_at, u.last_login_at, t.bio, t.teacher_verification_status,
+        COALESCE(string_agg(DISTINCT s.name, ', ' ORDER BY s.name), '') AS subjects, count(DISTINCT c.id)::int AS courses
+        FROM users u JOIN teachers t ON t.user_id = u.id LEFT JOIN subject_teachers st ON st.teacher_id = u.id LEFT JOIN subjects s ON s.id = st.subject_id LEFT JOIN courses c ON c.teacher_id = u.id
+        WHERE u.id = $1 GROUP BY u.id, t.bio, t.teacher_verification_status`, [request.auth!.userId])
+    response.json({ data: result.rows[0] || null })
+}))
 async function insertQuestion(table: 'questions' | 'test_questions' | 'exam_questions', answerTable: 'answers' | 'test_answers' | 'exam_answers', ownerColumn: 'quiz_id' | 'test_id' | 'exam_id', ownerId: string, input: z.infer<typeof questionInput>) {
     const question = await pool.query(`INSERT INTO ${table} (${ownerColumn}, type, prompt, explanation, marks, position) VALUES ($1, $2, $3, $4, $5, COALESCE($6, (SELECT COALESCE(max(position), -1) + 1 FROM ${table} WHERE ${ownerColumn} = $1))) RETURNING id, type, prompt, explanation, marks, position`, [ownerId, input.type, input.prompt, input.explanation, input.marks, input.position ?? null])
     for (const option of input.options) await pool.query(`INSERT INTO ${answerTable} (question_id, answer_text, is_correct) VALUES ($1, $2, $3)`, [question.rows[0].id, option.text, option.correct])
@@ -37,7 +64,7 @@ router.get('/dashboard', asyncHandler(async (request, response) => {
     response.json({ data: { courses: courses.rows, students: students.rows[0]?.total || 0, pendingSubmissions: submissions.rows[0]?.pending || 0, analytics: analytics.rows[0] } })
 }))
 router.get('/courses', asyncHandler(async (request, response) => { const result = await pool.query('SELECT c.id, c.title, c.description, c.difficulty, c.status, c.subject_id, s.name AS subject, count(DISTINCT e.student_id)::int AS students FROM courses c JOIN subjects s ON s.id = c.subject_id LEFT JOIN enrollments e ON e.course_id = c.id WHERE c.teacher_id = $1 GROUP BY c.id, s.name ORDER BY c.updated_at DESC', [request.auth!.userId]); response.json({ data: result.rows }) }))
-router.post('/courses', asyncHandler(async (request, response) => { const input = z.object({ title: z.string().min(2).max(160), description: z.string().max(2000).default(''), subjectId: id, difficulty: z.string().max(80).default('Beginner'), educationLevelId: id.nullable().optional(), gradeId: id.nullable().optional(), programId: id.nullable().optional() }).parse(request.body); const result = await pool.query('INSERT INTO courses (teacher_id, subject_id, title, description, difficulty, status, education_level_id, grade_id, program_id) VALUES ($1, $2, $3, $4, $5, \'draft\', $6, $7, $8) RETURNING id, title, status', [request.auth!.userId, input.subjectId, input.title, input.description, input.difficulty, input.educationLevelId || null, input.gradeId || null, input.programId || null]); response.status(201).json({ data: result.rows[0] }) }))
+router.post('/courses', requireTeacherPermission('content.create'), asyncHandler(async (request, response) => { const input = z.object({ title: z.string().min(2).max(160), description: z.string().max(2000).default(''), subjectId: id, difficulty: z.string().max(80).default('Beginner'), educationLevelId: id.nullable().optional(), gradeId: id.nullable().optional(), programId: id.nullable().optional() }).parse(request.body); const result = await pool.query('INSERT INTO courses (teacher_id, subject_id, title, description, difficulty, status, education_level_id, grade_id, program_id) VALUES ($1, $2, $3, $4, $5, \'draft\', $6, $7, $8) RETURNING id, title, status', [request.auth!.userId, input.subjectId, input.title, input.description, input.difficulty, input.educationLevelId || null, input.gradeId || null, input.programId || null]); response.status(201).json({ data: result.rows[0] }) }))
 router.patch('/courses/:courseId', asyncHandler(async (request, response) => { const courseId = await ownedCourse(String(request.params.courseId), request.auth!.userId); const input = z.object({ title: z.string().min(2).max(160).optional(), description: z.string().max(2000).optional(), difficulty: z.string().max(80).optional(), status: z.enum(['draft', 'pending', 'published', 'archived']).optional() }).parse(request.body); const result = await pool.query('UPDATE courses SET title = COALESCE($1, title), description = COALESCE($2, description), difficulty = COALESCE($3, difficulty), status = COALESCE($4, status), published_at = CASE WHEN $4 = \'published\' THEN now() ELSE published_at END WHERE id = $5 RETURNING id, title, description, difficulty, status', [input.title || null, input.description ?? null, input.difficulty || null, input.status || null, courseId]); response.json({ data: result.rows[0] }) }))
 router.post('/courses/:courseId/modules', asyncHandler(async (request, response) => { const courseId = await ownedCourse(String(request.params.courseId), request.auth!.userId); const input = z.object({ title: z.string().min(1).max(160), position: z.number().int().nonnegative().optional() }).parse(request.body); const result = await pool.query('INSERT INTO modules (course_id, title, position) VALUES ($1, $2, COALESCE($3, (SELECT COALESCE(max(position), -1) + 1 FROM modules WHERE course_id = $1))) RETURNING id, title, position', [courseId, input.title, input.position ?? null]); response.status(201).json({ data: result.rows[0] }) }))
 router.post('/modules/:moduleId/lessons', asyncHandler(async (request, response) => { const module = await ownedModule(String(request.params.moduleId), request.auth!.userId); const input = z.object({ title: z.string().min(1).max(160), content: z.unknown().default({}), durationMinutes: z.number().int().positive().default(1), position: z.number().int().nonnegative().optional() }).parse(request.body); const result = await pool.query('INSERT INTO lessons (module_id, title, content, duration_minutes, position) VALUES ($1, $2, $3, $4, COALESCE($5, (SELECT COALESCE(max(position), -1) + 1 FROM lessons WHERE module_id = $1))) RETURNING id, title, duration_minutes, position', [module.id, input.title, JSON.stringify(input.content), input.durationMinutes, input.position ?? null]); response.status(201).json({ data: result.rows[0] }) }))
