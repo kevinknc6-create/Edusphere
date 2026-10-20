@@ -6,7 +6,7 @@ import { pool } from '../db/pool.js'
 import { env } from '../config.js'
 import { HttpError, asyncHandler } from '../errors.js'
 import { authRateLimit } from '../middleware/security.js'
-import { signAccessToken } from '../middleware/auth.js'
+import { requireAuth, signAccessToken } from '../middleware/auth.js'
 
 const router = Router()
 const passwordSchema = z.string().min(12, 'Password must be at least 12 characters').max(128)
@@ -79,6 +79,13 @@ router.post('/login', authRateLimit, asyncHandler(async (request, response) => {
     const refreshToken = await issueRefreshToken(user.id)
     response.cookie('edusphere_refresh', refreshToken, { httpOnly: true, secure: env.NODE_ENV === 'production', sameSite: env.COOKIE_SAME_SITE, maxAge: 30 * 24 * 60 * 60 * 1000 })
     response.json({ accessToken: signAccessToken(user.id, user.role), user: { id: user.id, email: user.email, fullName: user.full_name, role: user.role } })
+}))
+
+router.get('/me', requireAuth, asyncHandler(async (request, response) => {
+    const result = await pool.query('SELECT id, email, full_name, role, status FROM users WHERE id = $1', [request.auth!.userId])
+    const user = result.rows[0]
+    if (!user || user.status !== 'active') throw new HttpError(401, 'Active session required')
+    response.json({ data: { id: user.id, email: user.email, fullName: user.full_name, role: user.role } })
 }))
 
 router.post('/teacher/request-code', authRateLimit, asyncHandler(async (request, response) => {

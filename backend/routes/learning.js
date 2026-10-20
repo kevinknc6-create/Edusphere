@@ -45,6 +45,11 @@ function text(value, fallback = "") {
     return typeof value === "string" ? value.trim() : fallback;
 }
 
+async function studentProfile(userId) {
+    const result = await pool.query("SELECT education_level_id, grade_id, program_id FROM users WHERE id = $1 AND role = 'student'", [userId]);
+    return result.rows[0] || null;
+}
+
 router.get("/taxonomy", async (_req, res) => {
     try {
         const [levels, grades, faculties, departments, programs, subjects] = await Promise.all([
@@ -62,13 +67,18 @@ router.get("/taxonomy", async (_req, res) => {
     }
 });
 
+router.use(requireAuth);
+
 router.get("/courses", async (req, res) => {
     const search = text(req.query.search);
-    const level = integer(req.query.level);
-    const grade = integer(req.query.grade);
-    const program = integer(req.query.program);
+    let level = integer(req.query.level);
+    let grade = integer(req.query.grade);
+    let program = integer(req.query.program);
     const subject = integer(req.query.subject);
     try {
+        const student = req.auth.role === "student" ? await studentProfile(req.auth.userId) : null;
+        if (req.auth.role === "student" && (!student || !student.education_level_id || !student.grade_id)) return res.json({ data: [] });
+        if (student) { level = student.education_level_id; grade = student.grade_id; program = student.program_id; }
         const result = await pool.query(`
       SELECT c.id, c.title, c.description, c.difficulty, c.status, c.education_level_id, c.grade_id, c.program_id,
              s.name AS subject, u.name AS teacher,
@@ -76,16 +86,17 @@ router.get("/courses", async (req, res) => {
       FROM library_courses c
       JOIN library_subjects s ON s.id = c.subject_id
       LEFT JOIN users u ON u.id = c.teacher_id
-      LEFT JOIN course_modules m ON m.course_id = c.id
-      LEFT JOIN course_lessons l ON l.module_id = m.id
+            LEFT JOIN course_modules m ON m.course_id = c.id AND m.status = 'published'
+            LEFT JOIN course_lessons l ON l.module_id = m.id AND l.status = 'published'
       WHERE c.status = 'published'
         AND ($1 = '' OR c.title ILIKE $2 OR c.description ILIKE $2 OR s.name ILIKE $2)
         AND ($3::bigint IS NULL OR c.education_level_id = $3)
         AND ($4::bigint IS NULL OR c.grade_id = $4)
         AND ($5::bigint IS NULL OR c.program_id = $5)
         AND ($6::bigint IS NULL OR c.subject_id = $6)
-      GROUP BY c.id, s.name, u.name
-    ORDER BY c.updated_at DESC, c.title`, [search, `%${search}%`, level, grade, program, subject]);
+                AND (NOT $7::boolean OR (c.education_level_id = $8 AND c.grade_id IS NOT DISTINCT FROM $9::bigint AND c.program_id IS NOT DISTINCT FROM $10::bigint))
+            GROUP BY c.id, s.name, u.name
+        ORDER BY c.updated_at DESC, c.title`, [search, `%${search}%`, level, grade, program, subject, Boolean(student), student?.education_level_id || null, student?.grade_id || null, student?.program_id || null]);
         res.json({ data: result.rows });
     } catch (error) {
         console.error("COURSE LIST ERROR:", error.message);
@@ -98,27 +109,29 @@ router.get("/search", async (req, res) => {
     if (query.length < 2) return res.status(400).json({ message: "Search must contain at least two characters." });
     try {
         const pattern = `%${query}%`;
+        const studentScope = req.auth.role === "student" ? "AND EXISTS (SELECT 1 FROM users p WHERE p.id = $2 AND c.education_level_id = p.education_level_id AND c.grade_id IS NOT DISTINCT FROM p.grade_id AND c.program_id IS NOT DISTINCT FROM p.program_id)" : "";
         const result = await pool.query(`
       SELECT 'course' AS result_type, c.id, c.title, c.description, s.name AS subject, NULL::bigint AS lesson_id
       FROM library_courses c JOIN library_subjects s ON s.id = c.subject_id
       WHERE c.status = 'published' AND (c.title ILIKE $1 OR c.description ILIKE $1 OR s.name ILIKE $1)
+                ${studentScope}
       UNION ALL
       SELECT 'lesson', c.id, l.title, l.explanation, s.name, l.id
       FROM course_lessons l JOIN course_modules m ON m.id = l.module_id JOIN library_courses c ON c.id = m.course_id JOIN library_subjects s ON s.id = c.subject_id
-      WHERE c.status = 'published' AND (l.title ILIKE $1 OR l.explanation ILIKE $1 OR l.summary ILIKE $1)
+            WHERE c.status = 'published' AND m.status = 'published' AND l.status = 'published' AND (l.title ILIKE $1 OR l.explanation ILIKE $1 OR l.summary ILIKE $1) ${studentScope}
       UNION ALL
       SELECT 'note', c.id, n.title, n.body, s.name, n.lesson_id
       FROM lesson_notes n JOIN course_lessons l ON l.id = n.lesson_id JOIN course_modules m ON m.id = l.module_id JOIN library_courses c ON c.id = m.course_id JOIN library_subjects s ON s.id = c.subject_id
-      WHERE c.status = 'published' AND (n.title ILIKE $1 OR n.body ILIKE $1)
+            WHERE c.status = 'published' AND m.status = 'published' AND l.status = 'published' AND n.status = 'published' AND (n.title ILIKE $1 OR n.body ILIKE $1) ${studentScope}
       UNION ALL
       SELECT 'example', c.id, e.title, e.body, s.name, e.lesson_id
       FROM lesson_examples e JOIN course_lessons l ON l.id = e.lesson_id JOIN course_modules m ON m.id = l.module_id JOIN library_courses c ON c.id = m.course_id JOIN library_subjects s ON s.id = c.subject_id
-      WHERE c.status = 'published' AND (e.title ILIKE $1 OR e.body ILIKE $1)
+            WHERE c.status = 'published' AND m.status = 'published' AND l.status = 'published' AND e.status = 'published' AND (e.title ILIKE $1 OR e.body ILIKE $1) ${studentScope}
       UNION ALL
       SELECT 'exercise', c.id, 'Practice exercise', x.prompt, s.name, x.lesson_id
       FROM lesson_exercises x JOIN course_lessons l ON l.id = x.lesson_id JOIN course_modules m ON m.id = l.module_id JOIN library_courses c ON c.id = m.course_id JOIN library_subjects s ON s.id = c.subject_id
-      WHERE c.status = 'published' AND x.prompt ILIKE $1
-      ORDER BY title LIMIT 100`, [pattern]);
+            WHERE c.status = 'published' AND m.status = 'published' AND l.status = 'published' AND x.status = 'published' AND x.prompt ILIKE $1 ${studentScope}
+            ORDER BY title LIMIT 100`, req.auth.role === "student" ? [pattern, req.auth.userId] : [pattern]);
         res.json({ data: result.rows });
     } catch (error) {
         console.error("COURSE SEARCH ERROR:", error.message);
@@ -130,9 +143,13 @@ router.get("/courses/:id", async (req, res) => {
     const courseId = integer(req.params.id);
     if (!courseId) return res.status(400).json({ message: "Invalid course id" });
     try {
-        const course = await pool.query(`SELECT c.*, s.name AS subject, u.name AS teacher FROM library_courses c JOIN library_subjects s ON s.id = c.subject_id LEFT JOIN users u ON u.id = c.teacher_id WHERE c.id = $1 AND c.status = 'published'`, [courseId]);
+        const student = req.auth.role === "student" ? await studentProfile(req.auth.userId) : null;
+        if (req.auth.role === "student" && (!student || !student.education_level_id || !student.grade_id)) return res.status(404).json({ message: "Course not found" });
+        const scope = student ? "AND c.education_level_id = $2 AND c.grade_id IS NOT DISTINCT FROM $3::bigint AND c.program_id IS NOT DISTINCT FROM $4::bigint" : "";
+        const params = student ? [courseId, student.education_level_id, student.grade_id, student.program_id] : [courseId];
+        const course = await pool.query(`SELECT c.*, s.name AS subject, u.name AS teacher FROM library_courses c JOIN library_subjects s ON s.id = c.subject_id LEFT JOIN users u ON u.id = c.teacher_id WHERE c.id = $1 AND c.status = 'published' ${scope}`, params);
         if (!course.rows[0]) return res.status(404).json({ message: "Course not found" });
-        const modules = await pool.query(`SELECT m.id, m.title, m.position, COALESCE(json_agg(json_build_object('id', l.id, 'title', l.title, 'explanation', l.explanation, 'keyPoints', l.key_points, 'definitions', l.definitions, 'summary', l.summary, 'position', l.position, 'notes', (SELECT COALESCE(json_agg(n ORDER BY n.position), '[]') FROM lesson_notes n WHERE n.lesson_id = l.id), 'examples', (SELECT COALESCE(json_agg(e ORDER BY e.position), '[]') FROM lesson_examples e WHERE e.lesson_id = l.id), 'exercises', (SELECT COALESCE(json_agg(x ORDER BY x.position), '[]') FROM lesson_exercises x WHERE x.lesson_id = l.id)) ORDER BY l.position) FILTER (WHERE l.id IS NOT NULL), '[]') AS lessons FROM course_modules m LEFT JOIN course_lessons l ON l.module_id = m.id WHERE m.course_id = $1 GROUP BY m.id ORDER BY m.position`, [courseId]);
+        const modules = await pool.query(`SELECT m.id, m.title, m.position, COALESCE(json_agg(json_build_object('id', l.id, 'title', l.title, 'explanation', l.explanation, 'keyPoints', l.key_points, 'definitions', l.definitions, 'summary', l.summary, 'position', l.position, 'notes', (SELECT COALESCE(json_agg(n ORDER BY n.position), '[]') FROM lesson_notes n WHERE n.lesson_id = l.id AND n.status = 'published'), 'examples', (SELECT COALESCE(json_agg(e ORDER BY e.position), '[]') FROM lesson_examples e WHERE e.lesson_id = l.id AND e.status = 'published'), 'exercises', (SELECT COALESCE(json_agg(x ORDER BY x.position), '[]') FROM lesson_exercises x WHERE x.lesson_id = l.id AND x.status = 'published')) ORDER BY l.position) FILTER (WHERE l.id IS NOT NULL), '[]') AS lessons FROM course_modules m LEFT JOIN course_lessons l ON l.module_id = m.id AND l.status = 'published' WHERE m.course_id = $1 AND m.status = 'published' GROUP BY m.id ORDER BY m.position`, [courseId]);
         res.json({ data: { ...course.rows[0], modules: modules.rows } });
     } catch (error) {
         console.error("COURSE DETAIL ERROR:", error.message);
@@ -140,11 +157,9 @@ router.get("/courses/:id", async (req, res) => {
     }
 });
 
-router.use(requireAuth);
-
 router.get("/me/progress", async (req, res) => {
     try {
-        const result = await pool.query(`SELECT c.id AS course_id, c.title, COUNT(l.id)::int AS total_lessons, COUNT(lp.lesson_id) FILTER (WHERE lp.completed_at IS NOT NULL)::int AS completed_lessons, COALESCE(ROUND(COUNT(lp.lesson_id) FILTER (WHERE lp.completed_at IS NOT NULL) * 100.0 / NULLIF(COUNT(l.id), 0)), 0)::int AS progress FROM library_enrollments e JOIN library_courses c ON c.id = e.course_id LEFT JOIN course_modules m ON m.course_id = c.id LEFT JOIN course_lessons l ON l.module_id = m.id LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.student_id = $1 WHERE e.student_id = $1 GROUP BY c.id, c.title ORDER BY MAX(lp.completed_at) DESC NULLS LAST`, [req.auth.userId]);
+        const result = await pool.query(`SELECT c.id AS course_id, c.title, COUNT(l.id)::int AS total_lessons, COUNT(lp.lesson_id) FILTER (WHERE lp.completed_at IS NOT NULL)::int AS completed_lessons, COALESCE(ROUND(COUNT(lp.lesson_id) FILTER (WHERE lp.completed_at IS NOT NULL) * 100.0 / NULLIF(COUNT(l.id), 0)), 0)::int AS progress FROM library_enrollments e JOIN users p ON p.id = e.student_id JOIN library_courses c ON c.id = e.course_id AND c.education_level_id = p.education_level_id AND c.grade_id IS NOT DISTINCT FROM p.grade_id AND c.program_id IS NOT DISTINCT FROM p.program_id LEFT JOIN course_modules m ON m.course_id = c.id AND m.status = 'published' LEFT JOIN course_lessons l ON l.module_id = m.id AND l.status = 'published' LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.student_id = $1 WHERE e.student_id = $1 AND c.status = 'published' GROUP BY c.id, c.title ORDER BY MAX(lp.completed_at) DESC NULLS LAST`, [req.auth.userId]);
         res.json({ data: result.rows });
     } catch (error) {
         console.error("PROGRESS ERROR:", error.message);
@@ -155,6 +170,11 @@ router.get("/me/progress", async (req, res) => {
 router.post("/courses/:id/enroll", async (req, res) => {
     const courseId = integer(req.params.id);
     if (!courseId) return res.status(400).json({ message: "Invalid course id" });
+    if (req.auth.role !== "student") return res.status(403).json({ message: "Student access required" });
+    const profile = await studentProfile(req.auth.userId);
+    if (!profile || !profile.education_level_id || !profile.grade_id) return res.status(404).json({ message: "Published course not found" });
+    const eligible = await pool.query("SELECT 1 FROM library_courses WHERE id = $1 AND status = 'published' AND education_level_id = $2 AND grade_id IS NOT DISTINCT FROM $3::bigint AND program_id IS NOT DISTINCT FROM $4::bigint", [courseId, profile.education_level_id, profile.grade_id, profile.program_id]);
+    if (!eligible.rows[0]) return res.status(404).json({ message: "Published course not found" });
     await pool.query("INSERT INTO library_enrollments (student_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [req.auth.userId, courseId]);
     res.status(201).json({ message: "Enrolled" });
 });
@@ -163,8 +183,9 @@ router.post("/lessons/:id/progress", async (req, res) => {
     const lessonId = integer(req.params.id);
     const secondsSpent = Number(req.body.secondsSpent || 0);
     if (!lessonId || !Number.isInteger(secondsSpent) || secondsSpent < 0 || secondsSpent > 86400) return res.status(400).json({ message: "Invalid lesson progress" });
-    const lesson = await pool.query("SELECT m.course_id FROM course_lessons l JOIN course_modules m ON m.id = l.module_id WHERE l.id = $1", [lessonId]);
-    if (!lesson.rows[0]) return res.status(404).json({ message: "Lesson not found" });
+    if (req.auth.role !== "student") return res.status(403).json({ message: "Student access required" });
+    const lesson = await pool.query("SELECT m.course_id FROM course_lessons l JOIN course_modules m ON m.id = l.module_id JOIN library_courses c ON c.id = m.course_id JOIN users p ON p.id = $2 WHERE l.id = $1 AND l.status = 'published' AND m.status = 'published' AND c.status = 'published' AND c.education_level_id = p.education_level_id AND c.grade_id IS NOT DISTINCT FROM p.grade_id AND c.program_id IS NOT DISTINCT FROM p.program_id", [lessonId, req.auth.userId]);
+    if (!lesson.rows[0]) return res.status(404).json({ message: "Published lesson not found" });
     await pool.query(`INSERT INTO lesson_progress (student_id, course_id, lesson_id, completed_at, seconds_spent) VALUES ($1, $2, $3, CASE WHEN $4 THEN now() ELSE NULL END, $5) ON CONFLICT (student_id, lesson_id) DO UPDATE SET completed_at = EXCLUDED.completed_at, seconds_spent = lesson_progress.seconds_spent + EXCLUDED.seconds_spent`, [req.auth.userId, lesson.rows[0].course_id, lessonId, Boolean(req.body.completed), secondsSpent]);
     await pool.query("INSERT INTO recently_viewed_lessons (student_id, lesson_id) VALUES ($1, $2) ON CONFLICT (student_id, lesson_id) DO UPDATE SET viewed_at = now()", [req.auth.userId, lessonId]);
     res.json({ message: "Progress saved" });

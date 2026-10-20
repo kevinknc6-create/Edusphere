@@ -28,7 +28,7 @@ export type Permission =
 const rolePermissions: Record<AppRole, readonly Permission[]> = {
     student: [],
     teacher: [],
-    admin: ['users.view', 'users.manage', 'subjects.manage', 'courses.moderate', 'system.manage'],
+    admin: ['users.view', 'users.manage', 'subjects.manage', 'courses.moderate', 'system.manage', 'audit.view'],
     'super-admin': ['users.view', 'users.manage', 'subjects.manage', 'courses.moderate', 'system.manage', 'audit.view'],
 }
 

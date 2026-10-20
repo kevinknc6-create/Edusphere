@@ -7,6 +7,8 @@ const authRoutes = require("./routes/auth");
 const aiRoutes = require("./routes/ai");
 const learningRoutes = require("./routes/learning");
 const studentRoutes = require("./routes/student");
+const adminRoutes = require("./routes/admin");
+const messageRoutes = require("./routes/messages");
 
 const app = express();
 app.get("/health", (_req, res) => res.json({ status: "ok", service: "edusphere-legacy-api" }));
@@ -17,6 +19,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/learning", learningRoutes);
 app.use("/api/student", studentRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/messages", messageRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "Edusphere API is running" });

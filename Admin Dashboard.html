@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="edusphere-api-url" content="%VITE_API_URL%">
+<title>EduSphere Admin Dashboard</title>
+<meta name="description" content="EduSphere administrator dashboard.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+/* Apply saved theme before first paint to avoid a flash */
+try{var p=JSON.parse(localStorage.getItem('edusphere.prefs.v1')||'null');if(p&&p.theme)document.documentElement.setAttribute('data-theme',p.theme);}catch(e){}
+</script>
+<style>
+:root{
+  --bg:#f4f7fe;--card:#ffffff;--text:#0f1b3d;--muted:#64748b;--border:#e6ebf5;
+  --primary:#2563eb;--primary-d:#1d4ed8;--soft:#eef3ff;--input:#ffffff;--row:#f7f9fe;
+  --shadow:0 1px 2px rgba(15,27,61,.04),0 10px 30px rgba(37,99,235,.07);
+  --ok:#16a34a;--ok-bg:#e8f8ee;--warn:#b45309;--warn-bg:#fff4e0;--bad:#dc2626;--bad-bg:#fdecec;--off:#64748b;--off-bg:#eef1f6;--info:#2563eb;--info-bg:#e8efff;
+}
+[data-theme="dark"]{
+  --bg:#0a1124;--card:#111a35;--text:#e8edfb;--muted:#93a1c0;--border:#223055;
+  --soft:#18264d;--input:#0d1530;--row:#0f1832;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.25);
+  --ok:#4ade80;--ok-bg:rgba(34,197,94,.14);--warn:#fbbf24;--warn-bg:rgba(245,158,11,.14);--bad:#f87171;--bad-bg:rgba(239,68,68,.15);--off:#9fb0d0;--off-bg:rgba(148,163,184,.14);--info:#7aa2ff;--info-bg:rgba(59,130,246,.18);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font-family:Inter,"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.45;overflow-x:hidden}
+body.noscroll{overflow:hidden}
+h1,h2,h3,p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--primary)}
+.ic{flex:none;display:block}
+.skip{position:absolute;left:-999px;top:8px;background:var(--primary);color:#fff;padding:8px 14px;border-radius:8px;z-index:200}
+.skip:focus{left:8px}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+/* ---------- Sidebar ---------- */
+.sidebar{position:fixed;inset:0 auto 0 0;width:283px;background:linear-gradient(180deg,#0b1d52 0%,#081433 55%,#060f28 100%);color:#e6ecff;display:flex;flex-direction:column;padding:22px 22px 24px;z-index:60;overflow-y:auto;transition:transform .25s ease}
+.brand{display:flex;gap:12px;align-items:center;padding:0 4px 26px}
+.brand-name{font-size:26px;font-weight:800;letter-spacing:-.4px;color:#fff;line-height:1}
+.brand-tag{font-size:12px;color:#aab8e3;margin-top:6px}
+.nav{display:flex;flex-direction:column;gap:6px}
+.nav a{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:12px;color:#dbe4ff;text-decoration:none;font-weight:500;font-size:15.5px;transition:background .15s,transform .15s}
+.nav a:hover{background:rgba(255,255,255,.08)}
+.nav a[aria-current="page"]{background:linear-gradient(90deg,#2f6bff,#2257ee);color:#fff;box-shadow:0 10px 22px rgba(37,99,235,.38)}
+.nav .nbadge{margin-left:auto;background:#ef4444;color:#fff;border-radius:99px;font-size:11px;font-weight:700;min-width:22px;height:22px;display:grid;place-items:center;padding:0 6px}
+.promo{margin-top:auto;padding-top:24px}
+.promo-card{background:linear-gradient(180deg,#0f2160,#0a173f);border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:18px 18px 8px}
+.promo-row{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:#c9d6ff}
+.promo-row b{display:block;color:#fff;font-weight:600}
+.promo-row svg{color:#4f8bff;margin-top:2px}
+.scrim{position:fixed;inset:0;background:rgba(6,15,40,.55);z-index:55;opacity:0;pointer-events:none;transition:opacity .25s}
+.scrim.show{opacity:1;pointer-events:auto}
+
+/* ---------- Layout ---------- */
+.content{margin-left:283px;min-height:100vh;display:flex;flex-direction:column;min-width:0}
+.topbar{position:sticky;top:0;z-index:40;background:var(--card);border-bottom:1px solid var(--border);height:74px;display:flex;align-items:center;gap:14px;padding:0 24px}
+.menu-btn{display:none}
+.gsearch{position:relative;flex:1;max-width:420px}
+.gsearch label{display:flex;align-items:center;gap:10px;background:var(--soft);border:1px solid transparent;border-radius:99px;padding:0 18px;height:44px;color:var(--muted)}
+.gsearch label:focus-within{border-color:var(--primary);background:var(--input)}
+.gsearch input{border:0;background:transparent;outline:0;flex:1;min-width:0;height:100%;color:var(--text)}
+.results{position:absolute;top:52px;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);max-height:360px;overflow:auto;padding:6px;z-index:50}
+.results button{display:flex;width:100%;align-items:center;gap:10px;background:none;border:0;text-align:left;padding:8px 10px;border-radius:10px;cursor:pointer}
+.results button:hover,.results button:focus-visible{background:var(--soft)}
+.results .tag{margin-left:auto;font-size:11px;color:var(--muted);background:var(--off-bg);padding:2px 8px;border-radius:99px}
+.results .none{padding:14px;color:var(--muted);text-align:center}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.pop-wrap{position:relative}
+.icon-btn{width:40px;height:40px;border-radius:12px;border:1px solid transparent;background:transparent;display:inline-grid;place-items:center;cursor:pointer;color:var(--muted);transition:background .15s,color .15s;position:relative}
+.icon-btn:hover{background:var(--soft);color:var(--primary)}
+.icon-btn.danger:hover{background:var(--bad-bg);color:var(--bad)}
+.bell-badge{position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border-radius:99px;font-size:10px;font-weight:700;min-width:17px;height:17px;display:grid;place-items:center;padding:0 4px}
+.admin-btn{display:flex;align-items:center;gap:10px;background:none;border:0;cursor:pointer;padding:4px 6px;border-radius:12px;text-align:left}
+.admin-btn:hover{background:var(--soft)}
+.admin-btn .nm{font-weight:600;line-height:1.2}
+.admin-btn .rl{font-size:12px;color:var(--muted)}
+.popover{position:absolute;right:0;top:50px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 18px 50px rgba(15,27,61,.18);width:340px;max-width:calc(100vw - 24px);z-index:60;overflow:hidden}
+.popover.small{width:230px}
+.pop-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);font-weight:700}
+.pop-item{display:flex;gap:10px;width:100%;text-align:left;background:none;border:0;padding:12px 16px;cursor:pointer;border-bottom:1px solid var(--border)}
+.pop-item:last-child{border-bottom:0}
+.pop-item:hover{background:var(--row)}
+.pop-item.unread{background:var(--soft)}
+.pop-item .dot{width:8px;height:8px;border-radius:50%;background:var(--primary);margin-top:6px;flex:none}
+.pop-item .dot.read{background:transparent}
+.pop-item small{display:block;color:var(--muted)}
+.menu-item{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;padding:11px 16px;cursor:pointer;text-align:left}
+.menu-item:hover{background:var(--soft)}
+main{flex:1;padding:26px 24px 10px;min-width:0}
+main:focus{outline:none}
+footer.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;padding:18px 24px 24px;color:var(--muted);font-size:12.5px}
+
+/* ---------- Generic ---------- */
+.page-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:14px;margin-bottom:20px}
+.page-head h1{font-size:28px;font-weight:700;letter-spacing:-.4px}
+.page-head h1:focus{outline:none}
+.sub{color:var(--muted);margin-top:4px;font-size:15px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);min-width:0}
+.card-pad{padding:22px}
+.card-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+.card-title h2{font-size:17px;font-weight:700}
+.card-title .ic{color:var(--primary)}
+.card-sub{color:var(--muted);font-size:13px}
+.link-btn{background:none;border:0;color:var(--primary);cursor:pointer;display:inline-flex;gap:6px;align-items:center;font-weight:500;font-size:13px;padding:4px;border-radius:6px}
+.link-btn:hover{text-decoration:underline}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-weight:600;transition:transform .1s,background .15s,box-shadow .15s}
+.btn:hover{background:var(--soft)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:linear-gradient(180deg,#3b78ff,#2563eb);border-color:#2563eb;color:#fff;box-shadow:0 8px 18px rgba(37,99,235,.28)}
+.btn.primary:hover{background:linear-gradient(180deg,#3170f6,#1d4ed8)}
+.btn.danger{background:#dc2626;border-color:#dc2626;color:#fff}
+.btn.danger:hover{background:#b91c1c}
+.btn.sm{padding:7px 12px;font-size:13px}
+.chip{display:inline-block;font-size:11px;font-weight:600;background:var(--warn-bg);color:var(--warn);padding:3px 9px;border-radius:99px;margin-left:8px;vertical-align:middle}
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap}
+.b-ok{background:var(--ok-bg);color:var(--ok)}.b-warn{background:var(--warn-bg);color:var(--warn)}.b-bad{background:var(--bad-bg);color:var(--bad)}.b-off{background:var(--off-bg);color:var(--off)}.b-info{background:var(--info-bg);color:var(--info)}
+.av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;flex:none;letter-spacing:.3px}
+.av.icon-av{background:var(--soft);color:var(--primary);border-radius:12px}
+.person{display:flex;align-items:center;gap:12px;min-width:0}
+.p-name{font-weight:600}
+.p-sub{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.ta-r{text-align:right}
+
+/* toolbar + tables */
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border)}
+.sbox{display:flex;align-items:center;gap:8px;background:var(--input);border:1px solid var(--border);border-radius:12px;padding:0 12px;height:40px;flex:1 1 240px;max-width:380px;color:var(--muted)}
+.sbox:focus-within{border-color:var(--primary)}
+.sbox input{border:0;outline:0;background:transparent;flex:1;min-width:0;height:100%}
+.toolbar select{height:40px;border:1px solid var(--border);border-radius:12px;background:var(--input);padding:0 12px;cursor:pointer;max-width:100%}
+.count{margin-left:auto;color:var(--muted);font-size:13px}
+.table-wrap{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse}
+.t th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:12px 16px;background:var(--row);border-bottom:1px solid var(--border);white-space:nowrap;font-weight:600}
+.t td{padding:12px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+.t tbody tr:hover td{background:var(--row)}
+.t tbody tr:last-child td{border-bottom:0}
+td.actions{white-space:nowrap;text-align:right}
+td.actions .icon-btn{width:34px;height:34px}
+.pager{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}
+.pages{display:flex;gap:4px;flex-wrap:wrap}
+.pages button{min-width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:var(--card);cursor:pointer;padding:0 8px}
+.pages button:hover:not(:disabled){background:var(--soft)}
+.pages button[aria-current="page"]{background:var(--primary);color:#fff;border-color:var(--primary)}
+.pages button:disabled{opacity:.45;cursor:not-allowed}
+.empty{text-align:center;padding:54px 20px;color:var(--muted)}
+.empty .eic{width:64px;height:64px;border-radius:50%;background:var(--soft);color:var(--primary);display:grid;place-items:center;margin:0 auto 14px}
+.empty h3{color:var(--text);font-size:17px;margin-bottom:6px}
+.empty .btn{margin-top:16px}
+
+/* ---------- Dashboard ---------- */
+.dash{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:24px;align-items:start}
+.dash-main,.dash-side{display:flex;flex-direction:column;gap:22px;min-width:0}
+.hello{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px}
+.hello h1{font-size:30px;font-weight:700;letter-spacing:-.5px}
+.date-box{display:flex;gap:12px;align-items:flex-start;color:var(--text)}
+.date-box .ic{color:var(--muted);margin-top:2px}
+.date-box b{font-weight:600;font-size:15px;display:block}
+.date-box span{color:var(--muted);font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.stat{--c:37,99,235;display:block;text-decoration:none;color:inherit;border-radius:16px;padding:16px;background:rgba(var(--c),.07);border:1px solid rgba(var(--c),.16);box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s}
+.stat:hover{transform:translateY(-2px)}
+.stat.c-green{--c:34,197,94}.stat.c-purple{--c:147,51,234}.stat.c-orange{--c:245,158,11}.stat.c-rose{--c:236,72,153}
+.stat-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.stat-ic{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:rgba(var(--c),.16);color:rgb(var(--c))}
+.stat-l{font-weight:600;font-size:13px;color:rgb(var(--c));filter:brightness(.8)}
+[data-theme="dark"] .stat-l{filter:brightness(1.25)}
+.stat-v{font-size:30px;font-weight:700;letter-spacing:-.5px;line-height:1.1}
+.stat-t{font-size:12px;color:var(--ok);margin-top:10px;display:flex;gap:4px;align-items:center}
+.stat-t span{color:var(--muted)}
+.charts{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:22px}
+.chart-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.chart-head select{border:1px solid var(--border);background:var(--input);border-radius:10px;height:34px;padding:0 8px;font-size:13px;max-width:140px}
+.line-wrap{position:relative;margin-top:12px}
+.line-wrap svg{width:100%;height:auto;display:block;overflow:visible}
+.tip{position:absolute;transform:translate(-50%,-125%);background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);border-radius:10px;padding:6px 10px;font-size:12px;pointer-events:none;white-space:nowrap;transition:left .15s,top .15s}
+.tip small{display:block;color:var(--muted)}
+.hit{cursor:pointer;outline:none}
+.donut-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin-top:14px;justify-content:center}
+.donut{position:relative;width:190px;height:190px;flex:none}
+.donut svg{width:100%;height:100%}
+.donut .seg{transition:opacity .15s,stroke-width .15s;cursor:pointer}
+.donut .seg:hover{stroke-width:30}
+.donut-c{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.donut-c b{font-size:30px;line-height:1}
+.donut-c span{font-size:12.5px;color:var(--muted)}
+.legend{display:grid;gap:9px;min-width:150px;flex:1}
+.legend div{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.legend i{width:11px;height:11px;border-radius:3px;flex:none}
+.legend b{margin-left:auto;color:var(--text);font-weight:600}
+.act-card{padding:22px}
+.act-card .t td,.act-card .t th{padding:11px 12px}
+.act-ic{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;color:#fff;margin-right:8px;vertical-align:middle}
+.mini-person{display:inline-flex;align-items:center;gap:8px}
+.mini-person .av{width:22px;height:22px;font-size:9px}
+.user-item{display:flex;gap:12px;align-items:center;width:100%;background:none;border:0;text-align:left;cursor:pointer;padding:10px 6px;border-radius:12px}
+.user-item:hover{background:var(--soft)}
+.user-item .av{width:46px;height:46px;font-size:15px}
+.user-item small{display:block;color:var(--muted);font-size:12.5px}
+.timeline{display:grid;gap:4px;margin-top:10px}
+.tl{display:grid;grid-template-columns:22px 1fr;gap:10px;position:relative;padding-bottom:12px}
+.tl::before{content:"";position:absolute;left:10px;top:20px;bottom:-2px;width:2px;background:var(--border)}
+.tl:last-child::before{display:none}
+.tl i{width:14px;height:14px;border-radius:50%;margin:4px 0 0 3px;border:3px solid var(--card);box-shadow:0 0 0 2px var(--c)}
+.tl .tm{color:var(--muted);font-size:13px}
+.tl b{font-weight:500;display:block}
+.tl small{color:var(--muted)}
+.notif-list{display:grid;margin-top:8px}
+.notif-list .pop-item{padding:10px 8px;border-radius:10px;border-bottom:1px solid var(--border)}
+
+/* ---------- Messages ---------- */
+.msg-wrap{display:grid;grid-template-columns:340px minmax(0,1fr);min-height:560px;overflow:hidden}
+.msg-list{border-right:1px solid var(--border);display:flex;flex-direction:column;min-width:0}
+.msg-tools{padding:14px;display:flex;gap:8px;border-bottom:1px solid var(--border)}
+.msg-tools .sbox{flex:1;max-width:none}
+#convList{overflow-y:auto;max-height:620px}
+.conv{display:flex;gap:12px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--border);padding:14px;cursor:pointer;align-items:center}
+.conv:hover{background:var(--row)}
+.conv.active{background:var(--soft)}
+.conv .meta{flex:1;min-width:0}
+.conv .row1{display:flex;justify-content:space-between;gap:8px}
+.conv .row1 span{font-size:12px;color:var(--muted);white-space:nowrap}
+.conv .prev{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv.unread .p-name,.conv.unread .prev{font-weight:700;color:var(--text)}
+.udot{width:10px;height:10px;border-radius:50%;background:var(--primary);flex:none}
+.msg-thread{display:flex;flex-direction:column;min-width:0}
+.th-head{display:flex;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)}
+.th-body{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:10px;max-height:480px;min-height:300px}
+.bubble{max-width:75%;padding:10px 14px;border-radius:16px;background:var(--off-bg);overflow-wrap:anywhere}
+.bubble.me{align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:4px}
+.bubble:not(.me){border-bottom-left-radius:4px}
+.bubble small{display:block;opacity:.7;font-size:11px;margin-top:3px}
+.reply{display:flex;gap:10px;padding:14px;border-top:1px solid var(--border)}
+.reply input{flex:1;min-width:0;border:1px solid var(--border);background:var(--input);border-radius:12px;padding:0 14px;height:42px}
+.back-btn{display:none}
+
+/* ---------- Forms / modal ---------- */
+.overlay{position:fixed;inset:0;background:rgba(8,16,40,.55);display:grid;place-items:center;padding:16px;z-index:100;animation:fade .15s}
+.modal{background:var(--card);border-radius:18px;width:100%;max-width:560px;max-height:calc(100vh - 32px);display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.35);animation:pop .18s}
+.modal.narrow{max-width:440px}
+.m-head{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--border)}
+.m-head h2{font-size:18px}
+.m-body{padding:20px 22px;overflow-y:auto}
+.m-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 22px;border-top:1px solid var(--border);flex-wrap:wrap}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes pop{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field.full{grid-column:1/-1}
+.field label{font-weight:600;font-size:13px}
+.req{color:var(--bad)}
+.field input,.field select,.field textarea{border:1px solid var(--border);background:var(--input);border-radius:10px;padding:10px 12px;width:100%;min-width:0}
+.field textarea{resize:vertical;min-height:80px}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--primary);outline:2px solid rgba(37,99,235,.2)}
+.field [aria-invalid="true"]{border-color:var(--bad)}
+.err{color:var(--bad);font-size:12px;min-height:0}
+.hint{color:var(--muted);font-size:12.5px}
+.detail-head{display:flex;gap:14px;align-items:center;margin-bottom:16px}
+.detail-head .av{width:56px;height:56px;font-size:19px}
+.dl{display:grid;grid-template-columns:130px 1fr;gap:10px 14px}
+.dl dt{color:var(--muted);font-weight:500}
+.dl dd{margin:0;overflow-wrap:anywhere}
+.toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:10px;z-index:300;max-width:calc(100vw - 32px)}
+.toast{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--ok);border-radius:12px;padding:12px 16px;box-shadow:0 14px 40px rgba(0,0,0,.2);animation:pop .2s;min-width:240px}
+.toast.error{border-left-color:var(--bad)}
+.toast.info{border-left-color:var(--primary)}
+.toast .ic{margin-top:1px}
+.toast.success .ic{color:var(--ok)}.toast.error .ic{color:var(--bad)}.toast.info .ic{color:var(--primary)}
+
+/* settings */
+.set-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:22px}
+.set-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--border)}
+.set-row:last-child{border-bottom:0}
+.set-row small{display:block;color:var(--muted)}
+.switch{position:relative;width:48px;height:28px;border-radius:99px;border:0;background:#cbd5e1;cursor:pointer;flex:none;transition:background .2s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.switch[aria-checked="true"]{background:var(--primary)}
+.switch[aria-checked="true"]::after{transform:translateX(20px)}
+.notice{background:var(--info-bg);color:var(--info);border-radius:12px;padding:12px 14px;font-size:13px;display:flex;gap:10px;align-items:flex-start}
+
+/* ---------- Responsive ---------- */
+@media (max-width:1280px){
+  .dash{grid-template-columns:minmax(0,1fr)}
+  .dash-side{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));align-items:start}
+}
+@media (max-width:1023px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:none;box-shadow:0 0 60px rgba(0,0,0,.5)}
+  .content{margin-left:0}
+  .menu-btn{display:inline-grid}
+  .topbar{padding:0 14px}
+  main{padding:20px 14px 10px}
+  footer.foot{padding:16px 14px 22px}
+}
+@media (max-width:900px){.charts{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:800px){
+  .msg-wrap{grid-template-columns:minmax(0,1fr)}
+  .msg-wrap .msg-thread{display:none}
+  .msg-wrap.show-thread .msg-list{display:none}
+  .msg-wrap.show-thread .msg-thread{display:flex}
+  .back-btn{display:inline-grid}
+}
+@media (max-width:720px){
+  .t thead{display:none}
+  .t,.t tbody,.t tr,.t td{display:block;width:100%}
+  .t tr{border:1px solid var(--border);border-radius:14px;margin:12px 0;padding:6px 0;background:var(--card)}
+  .t tbody tr:hover td{background:transparent}
+  .t td{display:flex;justify-content:space-between;align-items:center;gap:12px;border:0!important;padding:8px 14px;text-align:right}
+  .t td::before{content:attr(data-label);color:var(--muted);font-weight:600;font-size:12px;text-align:left;flex:none}
+  .table-wrap{padding:0 12px}
+  .act-card .table-wrap{padding:0}
+  .admin-btn .who{display:none}
+  .fgrid{grid-template-columns:1fr}
+  .dl{grid-template-columns:100px 1fr}
+  .hello h1{font-size:24px}
+  .page-head h1{font-size:24px}
+  .count{margin-left:0;width:100%}
+}
+@media (max-width:420px){.top-right{gap:2px}.admin-btn .chev{display:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<div class="app">
+  <aside id="sidebar" class="sidebar" aria-label="Sidebar">
+    <div class="brand">
+      <svg width="46" height="46" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5fa0ff"/><stop offset="1" stop-color="#2563eb"/></linearGradient></defs><polygon points="32,6 60,20 32,34 4,20" fill="url(#lg1)"/><path d="M14 28v14c0 5 8 10 18 10s18-5 18-10V28L32 38z" fill="#1e40af"/><rect x="54" y="22" width="3" height="16" rx="1.5" fill="#7db0ff"/><circle cx="55.5" cy="40" r="3" fill="#7db0ff"/></svg>
+      <div><div class="brand-name" data-site-name>EduSphere</div><div class="brand-tag">Learn · Teach · Grow</div></div>
+    </div>
+    <nav class="nav" id="nav" aria-label="Main navigation"></nav>
+    <div class="promo">
+      <div class="promo-card">
+        <div class="promo-row"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg><div><b>Better Education</b>for a Brighter Future</div></div>
+        <svg viewBox="0 0 200 130" width="100%" aria-hidden="true" style="display:block;margin-top:6px">
+          <ellipse cx="100" cy="116" rx="70" ry="8" fill="rgba(0,0,0,.25)"/>
+          <path d="M34 78l70 -22 62 20v26l-62 20-70-18z" fill="#2f6bff"/>
+          <path d="M34 78l70 18 62-20v8l-62 20-70-18z" fill="#1d4ed8"/>
+          <path d="M104 96l62-20v26l-62 20z" fill="#e8efff"/>
+          <path d="M44 84l0 10" stroke="#9db8ff" stroke-width="3"/>
+          <polygon points="100,22 148,40 100,58 52,40" fill="#13265f"/>
+          <path d="M70 48v14c0 5 14 9 30 9s30-4 30-9V48l-30 12z" fill="#0d1d4d"/>
+          <path d="M148 40v18" stroke="#4f8bff" stroke-width="2"/><circle cx="148" cy="60" r="3" fill="#4f8bff"/>
+        </svg>
+      </div>
+    </div>
+  </aside>
+  <div id="scrim" class="scrim"></div>
+
+  <div class="content">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation menu" aria-controls="sidebar" aria-expanded="false"></button>
+      <div class="gsearch" id="gsearch">
+        <label><span id="gsIcon"></span><input id="gsInput" type="search" placeholder="Search students, teachers, courses…" aria-label="Search all records" autocomplete="off"></label>
+        <div class="results" id="gsResults" hidden></div>
+      </div>
+      <div class="top-right">
+        <button class="icon-btn" id="themeBtn" aria-label="Toggle dark mode" title="Toggle light/dark mode"></button>
+        <div class="pop-wrap">
+          <button class="icon-btn" id="bellBtn" aria-label="Notifications" aria-haspopup="true" aria-expanded="false"></button>
+          <div class="popover" id="bellPop" hidden></div>
+        </div>
+        <div class="pop-wrap">
+          <button class="admin-btn" id="adminBtn" aria-haspopup="true" aria-expanded="false" aria-label="Admin menu">
+            <span id="topAvatar"></span>
+            <span class="who"><div class="nm" id="topName">Connecting…</div><div class="rl" id="topRole">Verifying access</div></span>
+            <span class="chev" id="chev"></span>
+          </button>
+          <div class="popover small" id="adminPop" hidden></div>
+        </div>
+      </div>
+    </header>
+    <main id="main" tabindex="-1"><div id="view"><section class="card card-pad"><h1>Connecting to EduSphere…</h1></section></div></main>
+    <footer class="foot"><span id="footL"></span><span>Learn · Teach · Grow &nbsp;|&nbsp; Connected to EduSphere</span></footer>
+  </div>
+</div>
+<div id="modalRoot"></div>
+<div class="toasts" id="toasts" aria-live="polite" role="status"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* =====================================================================
+   Helpers
+   ===================================================================== */
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => Number(n).toLocaleString('en-US');
+const H=36e5, D=864e5;
+
+const ICONS={
+ home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+ users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+ user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+ school:'<path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/><path d="M12 9h.01"/>',
+ book:'<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+ layers:'<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+ edit:'<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/>',
+ clip:'<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+ bars:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+ mail:'<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+ search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+ bell:'<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+ plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+ pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+ eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+ trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+ cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+ clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+ trend:'<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
+ arrow:'<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+ menu:'<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+ x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+ check:'<polyline points="20 6 9 17 4 12"/>',
+ alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+ info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+ sun:'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
+ moon:'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+ down:'<polyline points="6 9 12 15 18 9"/>',
+ left:'<polyline points="15 18 9 12 15 6"/>',
+ right:'<polyline points="9 18 15 12 9 6"/>',
+ pie:'<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
+ send:'<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+ reset:'<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+ inbox:'<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+ cap:'<polygon points="12 3 1 9 12 15 23 9 12 3"/><path d="M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>',
+ file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>',
+ spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>'
+};
+const icon=(n,s=20)=>`<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||''}</svg>`;
+
+function ago(ts){
+  const s=Math.max(0,(Date.now()-ts)/1000);
+  if(s<60)return 'just now';
+  const m=Math.floor(s/60); if(m<60)return m+(m===1?' minute ago':' minutes ago');
+  const h=Math.floor(m/60); if(h<24)return h+(h===1?' hour ago':' hours ago');
+  const d=Math.floor(h/24); if(d<30)return d+(d===1?' day ago':' days ago');
+  return fmtDate(ts);
+}
+function fmtDate(ts){return new Date(ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});}
+function fmtTime(ts){return new Date(ts).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
+function hue(str){let h=0;for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))>>>0;return h%360;}
+function initials(n){const p=String(n).trim().split(/\s+/);return ((p[0]||'?')[0]+(p.length>1?p[p.length-1][0]:'')).toUpperCase();}
+function avatar(name,size){
+  const h=hue(name);
+  const st=`background:linear-gradient(135deg,hsl(${h} 70% 52%),hsl(${(h+35)%360} 70% 42%))${size?`;width:${size}px;height:${size}px;font-size:${Math.round(size*.36)}px`:''}`;
+  return `<span class="av" style="${st}" aria-hidden="true">${esc(initials(name))}</span>`;
+}
+function badge(v){
+  const s=String(v);
+  const m={Active:'ok',Published:'ok',Open:'ok',A:'ok',B:'ok',C:'info',Pending:'warn',Draft:'warn','On leave':'warn',D:'warn',E:'bad',F:'bad',Inactive:'off',Closed:'off',Archived:'off'};
+  return `<span class="badge b-${m[s]||'off'}">${esc(s)}</span>`;
+}
+function gradeOf(m,t){const p=t>0?m/t*100:0;return p>=80?'A':p>=70?'B':p>=60?'C':p>=50?'D':p>=40?'E':'F';}
+
+/* =====================================================================
+   Static option lists
+   ===================================================================== */
+const CLASSES=['Grade 9','Grade 10','Grade 11','Grade 12'];
+const SUBJECTS=['Mathematics','Science','Programming','English','History','Physics','Chemistry','Biology','Geography','Web Development','Computer Science','Economics'];
+const MAIN_CATS=['Mathematics','Science','Programming','English','History'];
+
+/* =====================================================================
+   Persistence (localStorage with in-memory fallback)
+   ===================================================================== */
+const KEY='edusphere.demo.v1', PKEY='edusphere.prefs.v1';
+let storageOK=true;
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){storageOK=false;return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);return true;}catch(e){storageOK=false;return false;}}
+function lsDel(k){try{localStorage.removeItem(k);}catch(e){}}
+
+const DEFAULT_PREFS={theme:'light',siteName:'EduSphere',emailNotif:true,profile:{name:'Admin',email:'admin@edusphere.example',role:'Administrator'}};
+let DB=null, PREFS=null;
+function loadPrefs(){
+  let p=null;try{p=JSON.parse(lsGet(PKEY)||'null');}catch(e){}
+  PREFS=Object.assign({},DEFAULT_PREFS,p||{});
+  const sharedTheme=lsGet('edusphere-theme');if(sharedTheme==='light'||sharedTheme==='dark')PREFS.theme=sharedTheme;
+  PREFS.profile=Object.assign({},DEFAULT_PREFS.profile,(p&&p.profile)||{});
+}
+function savePrefs(){if(!lsSet(PKEY,JSON.stringify(PREFS)))toast('Browser storage is unavailable – preferences will not persist.','error');lsSet('edusphere-theme',PREFS.theme);}
+function loadDB(){
+  DB={students:[],teachers:[],schools:[],courses:[],subjects:[],quizzes:[],assignments:[],results:[],conversations:[],activities:[],notifications:[],classes:[],chart:{active:[],signups:[]},overview:{}};
+}
+function saveDB(){}
+const configuredApiUrl=document.querySelector('meta[name="edusphere-api-url"]')?.content.trim()||'';
+const ADMIN_API=configuredApiUrl&&!configuredApiUrl.startsWith('%')?`${configuredApiUrl.replace(/\/$/,'').replace(/\/api$/,'')}/api`:'/api';
+const CMS_TYPES=new Set(['courses','subjects','quizzes','assignments']);
+let connectedUser=null, systemReady=false, systemError='';
+function dateValue(value){const parsed=Date.parse(value||'');return Number.isFinite(parsed)?parsed:0;}
+function displayStatus(value){
+  return ({active:'Active',inactive:'Inactive',suspended:'Suspended',pending:'Pending',approved:'Approved',verified:'Verified',rejected:'Rejected',draft:'Draft',published:'Published',archived:'Archived'})[String(value||'').toLowerCase()]||String(value||'—');
+}
+async function apiRequest(path,options={},retry=true){
+  const headers=new Headers(options.headers||{});
+  headers.set('Content-Type','application/json');
+  const token=sessionStorage.getItem('edusphere-access-token');
+  if(token)headers.set('Authorization','Bearer '+token);
+  let response;
+  try{response=await fetch(ADMIN_API+path,{...options,headers,credentials:'include'});}
+  catch{throw new Error('Unable to connect to the EduSphere API. Check that the server is running.');}
+  if(response.status===401&&retry&&path!=='/auth/refresh'){
+    const refreshed=await apiRequest('/auth/refresh',{method:'POST'},false).catch(()=>null);
+    if(refreshed&&refreshed.accessToken){sessionStorage.setItem('edusphere-access-token',refreshed.accessToken);return apiRequest(path,options,false);}
+    sessionStorage.removeItem('edusphere-access-token');
+  }
+  if(!response.ok){
+    const body=await response.json().catch(()=>({}));
+    throw new Error(body.error?.message||body.message||(response.status===401?'Your session has expired. Sign in again.':`EduSphere API request failed (${response.status}).`));
+  }
+  return response.status===204?null:response.json();
+}
+async function getAllPages(path){
+  const rows=[];let offset=0,total=0;
+  do{
+    const separator=path.includes('?')?'&':'?';
+    const result=await apiRequest(`${path}${separator}limit=200&offset=${offset}`);
+    if(!Array.isArray(result.data))throw new Error('The EduSphere API returned an invalid list response.');
+    rows.push(...result.data);total=Number(result.meta?.total??rows.length);offset+=result.data.length;
+    if(!result.data.length)break;
+  }while(offset<total);
+  return rows;
+}
+function requireAdminSession(){
+  const raw=sessionStorage.getItem('edusphere-user-session');
+  try{connectedUser=raw?JSON.parse(raw):null;}catch{connectedUser=null;}
+  if(!connectedUser||!['admin','super-admin'].includes(connectedUser.role))throw new Error('Administrator sign-in is required. Sign in to EduSphere with an administrator account, then open this dashboard again.');
+}
+async function connectSystem(){
+  requireAdminSession();
+  const [overview,students,teachers,taxonomy,courses,subjects,quizzes,assignments,schools,results,activities,notifications,classes,messages]=await Promise.all([
+    apiRequest('/admin/overview'),
+    getAllPages('/admin/users?role=student'),
+    apiRequest('/admin/teachers'),
+    apiRequest('/admin/taxonomy'),
+    getAllPages('/admin/content/courses'),
+    getAllPages('/admin/content/subjects'),
+    getAllPages('/admin/content/quizzes'),
+    getAllPages('/admin/content/assignments'),
+    getAllPages('/admin/schools'),
+    apiRequest('/admin/results'),
+    apiRequest('/admin/activities'),
+    apiRequest('/admin/notifications'),
+    apiRequest('/admin/classes'),
+    apiRequest('/messages')
+  ]);
+  const grades=new Map((taxonomy.data.grades||[]).map(item=>[item.id,item.name]));
+  const levels=new Map((taxonomy.data.levels||[]).map(item=>[item.id,item.name]));
+  const subjectRows=subjects.map(item=>({...item,name:item.name,level:item.grade_id?grades.get(item.grade_id)||'—':item.education_level_id?levels.get(item.education_level_id)||'—':'All grades',status:'—',created:dateValue(item.created_at),_rawStatus:''}));
+  const teacherRows=teachers.data.map(item=>({...item,name:item.full_name,email:item.email,subject:item.subjects||'—',phone:'',status:displayStatus(item.teacher_verification_status),created:dateValue(item.created_at),_rawStatus:item.teacher_verification_status,userStatus:item.status}));
+  const courseRows=courses.map(item=>({...item,name:item.title,class:item.grade_id?grades.get(item.grade_id)||'—':'—',subject:item.subject,teacher:item.teacher,status:displayStatus(item.status),created:dateValue(item.created_at),_rawStatus:item.status,subject_id:item.subject_id,teacher_id:item.teacher_id,grade_id:item.grade_id,education_level_id:item.education_level_id,program_id:item.program_id}));
+  const courseInfo=new Map(courseRows.map(item=>[item.id,item]));
+  DB.students=students.map(item=>({...item,name:item.full_name,class:'—',status:displayStatus(item.status),phone:'',guardian:'',created:dateValue(item.created_at),_rawStatus:item.status}));
+  DB.teachers=teacherRows;
+  DB.courses=courseRows;
+  DB.subjects=subjectRows;
+  DB.quizzes=quizzes.map(item=>{const course=courseInfo.get(item.course_id)||{};return {...item,subject:course.subject||'—',class:course.class||'—',questions:'—',status:displayStatus(item.status),created:dateValue(item.created_at),_rawStatus:item.status};});
+  DB.assignments=assignments.map(item=>{const course=courseInfo.get(item.course_id)||{};return {...item,subject:course.subject||'—',class:course.class||'—',due:item.due_at?String(item.due_at).slice(0,10):'',status:displayStatus(item.status),created:dateValue(item.created_at),_rawStatus:item.status};});
+  DB.schools=schools.map(item=>({...item,status:displayStatus(item.status),created:dateValue(item.created_at),_rawStatus:item.status}));
+  DB.results=results.data.map(item=>({id:item.id,student:item.student,class:'—',subject:item.course,assessment:item.assessment,assessmentType:item.assessment_type,marks:Number(item.score),total:Number(item.total),grade:gradeOf(Number(item.score),Number(item.total)),created:dateValue(item.submitted_at)}));
+  DB.activities=activities.data.map(item=>({user:item.actor||'System',action:String(item.action).replace(/[._]/g,' '),kind:item.entity_type==='assignment'?'assign':item.entity_type==='quiz'?'quiz':item.entity_type==='course'?'course':'lesson',details:item.metadata?.title||item.entity_type||'System activity',created:dateValue(item.created_at)}));
+  DB.notifications=notifications.data.map(item=>({id:item.id,text:item.title?`${item.title}: ${item.body}`:item.body,created:dateValue(item.created_at),read:Boolean(item.read_at)}));
+  DB.classes=classes.data.map(item=>({...item,title:item.title,teacher:item.teacher,startsAt:dateValue(item.starts_at),endsAt:dateValue(item.ends_at)}));
+  DB.conversations=messages.data.map(item=>({id:item.id,name:item.name,role:String(item.role||'user').replace(/^\w/,c=>c.toUpperCase()),participantId:item.participant_id,unread:Boolean(item.unread),msgs:(item.msgs||[]).map(message=>({me:message.me,text:message.text,ts:Number(message.ts)}))}));
+  DB.taxonomyLevels=taxonomy.data.levels||[];
+  DB.taxonomyGrades=taxonomy.data.grades||[];
+  DB.taxonomyPrograms=taxonomy.data.programs||[];
+  DB.overview=overview.data;
+  PREFS.profile={name:connectedUser.fullName||connectedUser.email, email:connectedUser.email, role:connectedUser.role==='super-admin'?'Super Administrator':'Administrator'};
+  systemReady=true;systemError='';
+}
+function showSystemError(message){
+  systemReady=false;systemError=message;
+  $('#view').innerHTML=`<section class="card card-pad" role="alert"><h1 id="pageTitle" tabindex="-1">Dashboard unavailable</h1><p class="sub" style="margin-top:10px">${esc(message)}</p><p style="margin-top:18px"><a class="btn primary" href="/">Return to EduSphere sign in</a></p></section>`;
+}
+async function refreshSystem(){
+  try{await connectSystem();applyBranding();render();toast('Live EduSphere data refreshed.');}
+  catch(error){showSystemError(error instanceof Error?error.message:'EduSphere data could not be loaded.');toast(systemError,'error');}
+}
+
+/* =====================================================================
+   Seed data (clearly sample data)
+   ===================================================================== */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function seed(){
+  const r=mulberry32(20250427), pick=a=>a[Math.floor(r()*a.length)], ri=(a,b)=>a+Math.floor(r()*(b-a+1));
+  const now=Date.now();
+  const FIRST=['Aline','Eric','Grace','Patrick','Diane','Claude','Sandrine','Olivier','Josiane','Fabrice','Beatrice','Kevin','Christine','Innocent','Yvonne','Samuel','Esther','David','Vestine','Alain','Chantal','Didier','Clarisse','Moses','Nadia','Joseph','Ange','Pacifique','Divine','Elvis','Gloria','Hassan','Irene','Jackson','Karen','Lionel','Mireille','Noel','Odette','Prince','Queen','Roger','Sylvie','Theo','Ursula','Victor','Winnie','Xavier'];
+  const LAST=['Uwimana','Niyonkuru','Iradukunda','Nsabimana','Mukamana','Habimana','Mugisha','Ingabire','Uwase','Nshuti','Kamanzi','Mutesi','Bizimana','Hakizimana','Umutoni','Ndayisaba','Tuyishime','Rukundo','Mukashema','Gasana','Kayitesi','Munyaneza','Niyigena','Twagirimana','Uwera','Karangwa','Murekatete','Ntwari','Sibomana','Rwigema'];
+  const combos=[];FIRST.forEach(f=>LAST.forEach(l=>combos.push(f+' '+l)));
+  const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
+  const fixedStu=['Aline Uwimana','Marie Claire Iradukunda','Leah Mukamana'];
+  const fixedTea=['Jean Bosco Niyonkuru','Emmanuel Nsabimana'];
+  const pool=shuffle(combos.filter(n=>!fixedStu.includes(n)));
+  const slug=n=>n.toLowerCase().replace(/[^a-z\s]/g,'').trim().replace(/\s+/g,'.');
+  const used=new Set();
+  const mail=(n,dom)=>{let b=slug(n),e=b+'@'+dom,i=2;while(used.has(e))e=b+(i++)+'@'+dom;used.add(e);return e;};
+  const phone=()=>`+250 78${ri(0,9)} ${ri(100,999)} ${ri(100,999)}`;
+  const pad=(n,l)=>String(n).padStart(l,'0');
+
+  /* students 1248 */
+  const students=[];
+  const stuInfo=[['Aline Uwimana','Grade 10',2*H],['Marie Claire Iradukunda','Grade 11',7*H],['Leah Mukamana','Grade 9',26*H]];
+  stuInfo.forEach(([n,c,off],i)=>students.push({id:'S'+pad(i+1,4),name:n,email:mail(n,'student.edusphere.example'),class:c,status:'Active',phone:phone(),guardian:pick(FIRST)+' '+n.split(' ').pop(),created:now-off}));
+  for(let i=students.length;i<1248;i++){
+    const n=pool[i-3],x=r();
+    students.push({id:'S'+pad(i+1,4),name:n,email:mail(n,'student.edusphere.example'),class:pick(CLASSES),status:x<.85?'Active':x<.93?'Inactive':'Pending',phone:phone(),guardian:pick(FIRST)+' '+n.split(' ').pop(),created:now-(2+r()*400)*D});
+  }
+  /* teachers 86 */
+  const tPool=shuffle(combos.slice()).filter(n=>!fixedTea.includes(n));
+  const teachers=[];
+  [['Jean Bosco Niyonkuru','Mathematics',5*H],['Emmanuel Nsabimana','Physics',24*H]].forEach(([n,s,off],i)=>teachers.push({id:'T'+pad(i+1,3),name:n,email:mail(n,'teacher.edusphere.example'),subject:s,phone:phone(),status:'Active',created:now-off}));
+  for(let i=teachers.length;i<86;i++){
+    const n=tPool[i],x=r();
+    teachers.push({id:'T'+pad(i+1,3),name:n,email:mail(n,'teacher.edusphere.example'),subject:SUBJECTS[i%SUBJECTS.length],phone:phone(),status:x<.9?'Active':x<.96?'On leave':'Inactive',created:now-(3+r()*600)*D});
+  }
+  /* schools 12 */
+  const sn=[['Kigali Heights Academy','Kigali'],['Lakeview Secondary School','Rubavu'],['Green Hills College','Kigali'],['Nyarutarama International School','Kigali'],['Remera Technical Institute','Kigali'],['Musanze Highland School','Musanze'],['Huye Science Academy','Huye'],['Gisenyi Peace School','Rubavu'],["Nyamirambo Girls' School",'Kigali'],['Kicukiro Innovation College','Kigali'],['Bugesera Community School','Bugesera'],['Rwamagana Model School','Rwamagana']];
+  const schools=sn.map(([n,loc],i)=>({id:'SC'+pad(i+1,3),name:n,location:loc+', Rwanda',phone:'+250 788 '+ri(100,999)+' '+ri(100,999),email:'info@'+slug(n).split('.').slice(0,2).join('')+'.example',status:i===11?'Pending':i===10?'Inactive':'Active',created:now-(30+i*20)*D}));
+  /* subjects 12 */
+  const desc={Mathematics:'Algebra, geometry, calculus and statistics.',Science:'General science: life, earth and physical sciences.',Programming:'Programming fundamentals, algorithms and problem solving.',English:'Language, literature, writing and communication skills.',History:'World and regional history, sources and analysis.',Physics:'Mechanics, electricity, waves and modern physics.',Chemistry:'Atoms, reactions, organic and inorganic chemistry.',Biology:'Cells, genetics, ecology and human biology.',Geography:'Physical and human geography, maps and GIS basics.','Web Development':'HTML, CSS, JavaScript and modern web tooling.','Computer Science':'Computing theory, data structures and systems.',Economics:'Micro and macro economics and financial literacy.'};
+  const subjects=SUBJECTS.map((n,i)=>({id:'SB'+pad(i+1,3),name:n,level:i<5?'All grades':CLASSES[1+(i%3)],description:desc[n],status:i===11?'Inactive':'Active',created:now-(60+i)*D}));
+  /* courses 42 with distribution 10/8/7/6/5/6 */
+  const suffix=['Foundations','Essentials','Advanced Topics','Practical Lab','Exam Preparation','Revision Clinic','Project Studio','Workshop','Fundamentals','Masterclass'];
+  const plan=[['Mathematics',10],['Science',8],['Programming',7],['English',6],['History',5],['Physics',1],['Chemistry',1],['Biology',1],['Geography',1],['Web Development',1],['Computer Science',1]];
+  const courses=[];let ci=1;
+  plan.forEach(([s,n])=>{for(let k=0;k<n;k++){
+    const ts=teachers.filter(t=>t.subject===s);const t=ts.length?ts[k%ts.length]:pick(teachers);
+    const nm=n===1?(s==='Web Development'?'Web Development':s==='Computer Science'?'Introduction to Computer Science':s+' '+suffix[k]):s+' '+suffix[k];
+    const x=r();
+    courses.push({id:'C'+pad(ci++,3),name:nm,class:CLASSES[(ci+k)%4],subject:s,teacher:t.name,status:x<.8?'Active':x<.93?'Draft':'Archived',created:now-(5+r()*200)*D});
+  }});
+  /* quizzes 156 */
+  const topics=['Chapter 1 Review','Chapter 2 Check','Mid-term Practice','Weekly Test','Revision Quiz','Concept Check','Final Practice','Pop Quiz','Unit Assessment','Skills Drill'];
+  const quizzes=[];
+  for(let i=0;i<156;i++){const s=SUBJECTS[i%SUBJECTS.length];const x=r();
+    quizzes.push({id:'Q'+pad(i+1,3),title:`${s}: ${topics[Math.floor(i/SUBJECTS.length)%topics.length]}`+(i>=120?` #${i-119}`:''),subject:s,class:pick(CLASSES),questions:ri(5,30),status:x<.75?'Published':'Draft',created:now-(1+r()*150)*D});}
+  /* assignments 30 */
+  const kinds=['Homework','Project','Lab Report','Essay','Problem Set','Case Study'];
+  const iso=ts=>new Date(ts).toISOString().slice(0,10);
+  const assignments=[];
+  for(let i=0;i<30;i++){const s=SUBJECTS[i%SUBJECTS.length];const off=ri(-12,24);
+    assignments.push({id:'A'+pad(i+1,3),title:`${s} ${kinds[i%kinds.length]} ${Math.floor(i/6)+1}`,subject:s,class:pick(CLASSES),due:iso(now+off*D),status:off<0?'Closed':'Open',created:now-(1+r()*40)*D});}
+  assignments[2]={id:'A003',title:'Physics - Chapter 3',subject:'Physics',class:'Grade 11',due:iso(now+3*D),status:'Open',created:now-6*H};
+  /* results 80 */
+  const results=[];
+  for(let i=0;i<80;i++){const st=students[Math.floor(r()*students.length)];const total=pick([50,100,100,100]);const marks=Math.min(total,Math.round(total*(.32+r()*.66)));
+    results.push({id:'R'+pad(i+1,3),student:st.name,studentId:st.id,class:st.class,subject:pick(SUBJECTS),marks,total,grade:gradeOf(marks,total),created:now-r()*60*D});}
+  /* activities */
+  const A=(user,action,kind,details,off)=>({user,action,kind,details,created:now-off});
+  const activities=[
+    A('Aline Uwimana','Completed a quiz','quiz','Mathematics - Algebra',2*H),
+    A('Jean Bosco Niyonkuru','Created a new course','course','Web Development',4*H),
+    A('Marie Claire Iradukunda','Submitted an assignment','assign','Physics - Chapter 3',6*H),
+    A('Emmanuel Nsabimana','Updated a lesson','lesson','React Basics',24*H),
+    A('Leah Mukamana','Enrolled in a course','enroll','Introduction to Computer Science',26*H),
+    A(students[10].name,'Completed a quiz','quiz','Science: Weekly Test',30*H),
+    A(teachers[5].name,'Updated a lesson','lesson','Chemistry - Reactions',34*H),
+    A(students[20].name,'Submitted an assignment','assign','English Essay 2',40*H)
+  ];
+  const classes=[
+    {time:'09:00 - 10:00',title:'Mathematics (Grade 10)',room:'Room 101',color:'#3b82f6'},
+    {time:'11:00 - 12:00',title:'Web Development',room:'Online Class',color:'#22c55e'},
+    {time:'14:00 - 15:00',title:'Physics (Grade 11)',room:'Room 203',color:'#a855f7'},
+    {time:'16:00 - 17:00',title:'English Language',room:'Room 105',color:'#f59e0b'}
+  ];
+  const notifications=[
+    {id:'n1',text:'12 new student registrations are awaiting review.',created:now-1*H,read:false},
+    {id:'n2',text:'Physics - Chapter 3 assignment has 28 new submissions.',created:now-5*H,read:false},
+    {id:'n3',text:'Quiz "Mathematics: Weekly Test" was published.',created:now-9*H,read:false},
+    {id:'n4',text:'Rwamagana Model School is waiting for approval.',created:now-26*H,read:true},
+    {id:'n5',text:'Sample data notice: all records are demo content stored in your browser.',created:now-30*H,read:true}
+  ];
+  const M=(me,text,off)=>({me,text,ts:now-off});
+  const conversations=[
+    {id:'m1',name:'Jean Bosco Niyonkuru',role:'Teacher',unread:true,msgs:[M(false,'Good morning! Could we move the Grade 10 algebra test to Thursday?',3*H)]},
+    {id:'m2',name:'Aline Uwimana',role:'Student',unread:true,msgs:[M(false,'I cannot open the Physics worksheet. Could you check the link?',5*H)]},
+    {id:'m3',name:'Emmanuel Nsabimana',role:'Teacher',unread:true,msgs:[M(false,'The lab schedule for next week is ready for your review.',8*H),M(true,'Thanks, I will review it today.',7*H),M(false,'Great, let me know if anything needs changing.',6*H)]},
+    {id:'m4',name:'Kigali Heights Academy',role:'School',unread:false,msgs:[M(false,'We would like to add two more classrooms to the platform.',28*H),M(true,'Sure, please send the room list and capacities.',27*H)]},
+    {id:'m5',name:'Marie Claire Iradukunda',role:'Student',unread:false,msgs:[M(false,'Thank you for extending the deadline!',50*H),M(true,'You are welcome. Good luck with the submission.',49*H)]},
+    {id:'m6',name:'Leah Mukamana',role:'Student',unread:false,msgs:[M(false,'Is there a revision session before the exams?',75*H)]},
+    {id:'m7',name:teachers[7].name,role:'Teacher',unread:false,msgs:[M(false,'New course outline attached for approval.',100*H)]},
+    {id:'m8',name:'Green Hills College',role:'School',unread:false,msgs:[M(true,'Welcome to EduSphere! Your onboarding checklist is ready.',150*H),M(false,'Thanks, we have started the setup.',148*H)]}
+  ];
+  return {students,teachers,schools,courses,subjects,quizzes,assignments,results,conversations,activities,notifications,classes,
+    chart:{active:[300,590,810,0],signups:[120,210,190,260]}};
+}
+
+/* =====================================================================
+   Entity configuration (drives all CRUD pages)
+   ===================================================================== */
+const stOpts=()=>['Active','Inactive','Pending'];
+const clsOpts=()=>[...new Set(DB.courses.map(c=>c.class).filter(c=>c&&c!=='—'))];
+const subOpts=()=>DB.subjects.map(s=>s.name);
+const ENT={
+ students:{singular:'Student',plural:'Students',icon:'users',prefix:'S',pad:4,mainLabel:'Student',kind:'enroll',
+  desc:'Manage student records, classes and enrolment status.',
+  fields:[{k:'name',l:'Full name',t:'text'},{k:'email',l:'Email',t:'email'},{k:'status',l:'Status',t:'text'}],
+  main:r=>[r.name,r.email],avatar:'person',
+  cols:[['ID',r=>esc(r.id)],['Status',r=>badge(r.status)]],
+  search:['name','email'],hint:'name or email',
+  filters:[{k:'status',l:'All statuses',opts:()=>['Active','Suspended','Pending']}]},
+ teachers:{singular:'Teacher',plural:'Teachers',icon:'user',prefix:'T',pad:3,mainLabel:'Teacher',kind:'lesson',
+  desc:'Manage teaching staff, the subjects they teach and their status.',
+  fields:[{k:'name',l:'Full name',t:'text'},{k:'email',l:'Email',t:'email'},{k:'subject',l:'Subjects taught',t:'text'},{k:'status',l:'Verification',t:'text'}],
+  main:r=>[r.name,r.email],avatar:'person',
+  cols:[['Subjects',r=>esc(r.subject)],['Courses',r=>esc(r.courses)],['Verification',r=>badge(r.status)]],
+  search:['name','email','subject'],hint:'name, email or subject',
+  filters:[{k:'status',l:'All statuses',opts:()=>['Pending','Approved','Verified','Suspended','Rejected']}]},
+ schools:{singular:'School',plural:'Schools',icon:'school',prefix:'SC',pad:3,mainLabel:'School',kind:'lesson',
+  desc:'Partner schools registered on the platform.',
+  fields:[{k:'name',l:'School name',t:'text',req:1,maxlen:100},{k:'location',l:'Location',t:'text',req:1,ph:'City, Country'},{k:'phone',l:'Contact phone',t:'tel',req:1},{k:'email',l:'Contact email',t:'email',req:1},{k:'status',l:'Status',t:'select',req:1,opts:stOpts}],
+  main:r=>[r.name,r.location],avatar:'icon',
+  cols:[['Contact',r=>`${esc(r.phone)}<div class="p-sub">${esc(r.email)}</div>`],['Status',r=>badge(r.status)]],
+  search:['name','location','email'],hint:'name, location or email',
+  filters:[{k:'status',l:'All statuses',opts:stOpts}]},
+ courses:{singular:'Course',plural:'Courses',icon:'book',prefix:'C',pad:3,mainLabel:'Course',kind:'course',
+  desc:'Courses offered across classes and subjects.',
+  fields:[{k:'name',l:'Course name',t:'text'},{k:'class',l:'Class',t:'text'},{k:'subject',l:'Subject',t:'text'},{k:'teacher',l:'Teacher',t:'text'},{k:'status',l:'Status',t:'text'}],
+  main:r=>[r.name,''],avatar:'icon',
+  cols:[['Subject',r=>esc(r.subject)],['Class',r=>esc(r.class)],['Teacher',r=>esc(r.teacher)],['Status',r=>badge(r.status)]],
+  search:['name','teacher','subject'],hint:'course, subject or teacher',
+  filters:[{k:'class',l:'All classes',opts:clsOpts},{k:'subject',l:'All subjects',opts:subOpts},{k:'status',l:'All statuses',opts:()=>['Draft','Pending','Approved','Rejected','Published','Archived']}]},
+ subjects:{singular:'Subject',plural:'Subjects',icon:'layers',prefix:'SB',pad:3,mainLabel:'Subject',kind:'lesson',
+  desc:'Subjects taught and the class levels they apply to.',
+  fields:[{k:'name',l:'Subject name',t:'text'},{k:'level',l:'Class level',t:'text'},{k:'description',l:'Description',t:'text'}],
+  main:r=>[r.name,''],avatar:'icon',
+  cols:[['Class level',r=>esc(r.level)],['Description',r=>esc((r.description||'—').length>70?r.description.slice(0,67)+'…':(r.description||'—'))]],
+  search:['name','description'],hint:'subject name or description',
+  filters:[]},
+ quizzes:{singular:'Quiz',plural:'Quizzes',icon:'edit',prefix:'Q',pad:3,mainLabel:'Quiz',kind:'quiz',
+  desc:'Create and manage quizzes for your classes.',
+  fields:[{k:'title',l:'Quiz title',t:'text'},{k:'subject',l:'Subject',t:'text'},{k:'class',l:'Class',t:'text'},{k:'questions',l:'Number of questions',t:'text'},{k:'status',l:'Status',t:'text'}],
+  main:r=>[r.title,''],avatar:'icon',
+  cols:[['Subject',r=>esc(r.subject)],['Class',r=>esc(r.class)],['Questions',r=>esc(r.questions)],['Status',r=>badge(r.status)]],
+  search:['title','subject'],hint:'quiz title or subject',
+  filters:[{k:'subject',l:'All subjects',opts:subOpts},{k:'class',l:'All classes',opts:clsOpts},{k:'status',l:'All statuses',opts:()=>['Draft','Published']}]},
+ assignments:{singular:'Assignment',plural:'Assignments',icon:'clip',prefix:'A',pad:3,mainLabel:'Assignment',kind:'assign',
+  desc:'Track assignments, due dates and their status.',
+  fields:[{k:'title',l:'Assignment title',t:'text'},{k:'subject',l:'Subject',t:'text'},{k:'class',l:'Class',t:'text'},{k:'due',l:'Due date',t:'date'},{k:'status',l:'Status',t:'text'}],
+  main:r=>[r.title,''],avatar:'icon',
+  cols:[['Subject',r=>esc(r.subject)],['Class',r=>esc(r.class)],['Due date',r=>esc(r.due?fmtDate(r.due):'—')],['Status',r=>badge(r.status)]],
+  search:['title','subject'],hint:'title or subject',
+  filters:[{k:'subject',l:'All subjects',opts:subOpts},{k:'class',l:'All classes',opts:clsOpts},{k:'status',l:'All statuses',opts:()=>['Draft','Pending','Approved','Rejected','Published','Archived']}]},
+ results:{singular:'Result',plural:'Results',icon:'bars',prefix:'R',pad:3,mainLabel:'Student',kind:'quiz',
+  desc:'Student marks and grades. Grades are calculated automatically from marks.',
+  fields:[{k:'student',l:'Student',t:'student',req:1,full:1,ph:'Start typing a student name…'},{k:'subject',l:'Subject',t:'select',req:1,opts:subOpts},{k:'marks',l:'Marks obtained',t:'number',req:1,min:0,max:1000},{k:'total',l:'Total marks',t:'number',req:1,min:1,max:1000,def:100}],
+  main:r=>[r.student,r.class],avatar:'person',
+  cols:[['Assessment',r=>`${esc(r.assessment)}<div class="p-sub">${esc(r.assessmentType)} · ${esc(r.subject)}</div>`],['Marks',r=>`${esc(r.marks)} / ${esc(r.total)} <span class="p-sub">(${Math.round(r.marks/r.total*100)}%)</span>`],['Grade',r=>badge(r.grade)]],
+  search:['student','subject','assessment','assessmentType'],hint:'student or assessment',
+  filters:[],
+  check(d,e){if(!e.marks&&!e.total&&d.marks>d.total)e.marks='Marks cannot exceed the total.';},
+  after(r){const s=DB.students.find(x=>x.name.toLowerCase()===String(r.student).toLowerCase());if(s){r.student=s.name;r.studentId=s.id;r.class=s.class;}r.grade=gradeOf(r.marks,r.total);},
+  extra:r=>[['Percentage',Math.round(r.marks/r.total*100)+'%'],['Grade',badge(r.grade)],['Class',esc(r.class)]]}
+};
+Object.keys(ENT).forEach(k=>ENT[k].key=k);
+
+/* =====================================================================
+   UI state, toasts, modals
+   ===================================================================== */
+let UI={};
+function toast(msg,type='success'){
+  const el=document.createElement('div');el.className='toast '+type;
+  el.innerHTML=`${icon(type==='error'?'alert':type==='info'?'info':'check',18)}<div>${esc(msg)}</div>`;
+  const box=$('#toasts');box.appendChild(el);
+  setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .3s';setTimeout(()=>el.remove(),300);},type==='error'?5000:3200);
+  while(box.children.length>4)box.firstChild.remove();
+}
+let lastFocus=null;
+function openModal(html,cls=''){
+  closeModal(true);
+  lastFocus=document.activeElement;
+  $('#modalRoot').innerHTML=`<div class="overlay" id="overlay"><div class="modal ${cls}" role="dialog" aria-modal="true" aria-labelledby="mTitle">${html}</div></div>`;
+  document.body.classList.add('noscroll');
+  const f=$('#modalRoot [data-autofocus]')||$('#modalRoot input:not([type=hidden]),#modalRoot select,#modalRoot textarea')||$('#modalRoot .m-foot button')||$('#modalRoot button');
+  if(f)f.focus();
+}
+function closeModal(silent){
+  const had=$('#modalRoot').innerHTML!=='';
+  $('#modalRoot').innerHTML='';document.body.classList.remove('noscroll');
+  if(had&&!silent&&lastFocus&&document.contains(lastFocus)){try{lastFocus.focus();}catch(e){}}
+}
+const mHead=t=>`<div class="m-head"><h2 id="mTitle">${esc(t)}</h2><button class="icon-btn" data-close aria-label="Close dialog">${icon('x')}</button></div>`;
+function confirmDialog({title,message,confirmText='Confirm',danger=true},onYes){
+  openModal(`${mHead(title)}<div class="m-body"><p>${message}</p></div><div class="m-foot"><button class="btn" data-close data-autofocus>Cancel</button><button class="btn ${danger?'danger':'primary'}" id="confirmYes">${esc(confirmText)}</button></div>`,'narrow');
+  $('#confirmYes').onclick=()=>{closeModal();onYes();};
+}
+
+/* =====================================================================
+   Data helpers
+   ===================================================================== */
+const find=(k,id)=>DB[k].find(r=>r.id===id);
+function nextId(k){const E=ENT[k];let m=0;DB[k].forEach(r=>{const n=parseInt(String(r.id).replace(/\D/g,''),10);if(n>m)m=n;});return E.prefix+String(m+1).padStart(E.pad,'0');}
+function logActivity(user,action,kind,details){
+  DB.activities.unshift({user,action,kind,details,created:Date.now()});
+  DB.activities.length=Math.min(DB.activities.length,60);
+}
+function unreadMsgs(){return DB.conversations.filter(c=>c.unread).length;}
+function unreadNotifs(){return DB.notifications.filter(n=>!n.read).length;}
+
+/* =====================================================================
+   Pages registry + router
+   ===================================================================== */
+const PAGES={
+ dashboard:{label:'Dashboard',icon:'home',render:renderDashboard},
+ students:{label:'Students',icon:'users',render:()=>renderEntity('students')},
+ teachers:{label:'Teachers',icon:'user',render:()=>renderEntity('teachers')},
+ schools:{label:'Schools',icon:'school',render:()=>renderEntity('schools')},
+ classes:{label:'Class schedule',icon:'cal',render:renderClasses},
+ courses:{label:'Courses',icon:'book',render:()=>renderEntity('courses')},
+ subjects:{label:'Subjects',icon:'layers',render:()=>renderEntity('subjects')},
+ quizzes:{label:'Quizzes',icon:'edit',render:()=>renderEntity('quizzes')},
+ assignments:{label:'Assignments',icon:'clip',render:()=>renderEntity('assignments')},
+ results:{label:'Results',icon:'bars',render:()=>renderEntity('results')},
+ messages:{label:'Messages',icon:'mail',render:renderMessages},
+ settings:{label:'Settings',icon:'gear',render:renderSettings}
+};
+let currentPage='dashboard';
+function pageFromHash(){const p=(location.hash||'').replace('#','');return PAGES[p]?p:'dashboard';}
+function buildNav(){
+  $('#nav').innerHTML=Object.keys(PAGES).map(k=>`<a href="#${k}" data-page="${k}">${icon(PAGES[k].icon,22)}<span>${PAGES[k].label}</span>${k==='messages'?'<span class="nbadge" id="navMsgBadge" hidden></span>':''}</a>`).join('');
+}
+function updateBadges(){
+  const n=unreadMsgs(),b=$('#navMsgBadge');if(b){b.textContent=n;b.hidden=n===0;}
+  const nb=unreadNotifs(),bb=$('#bellBadge');if(bb){bb.textContent=nb;bb.hidden=nb===0;}
+}
+function setActiveNav(){$$('#nav a').forEach(a=>{if(a.dataset.page===currentPage)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});}
+function render(){
+  if(!systemReady){showSystemError(systemError||'Connecting to EduSphere…');return;}
+  currentPage=pageFromHash();setActiveNav();
+  $('#view').dataset.page=currentPage;
+  PAGES[currentPage].render();
+  document.title=`${PAGES[currentPage].label} · ${PREFS.siteName}`;
+  updateBadges();
+}
+function route(){closeSidebar();closePops();render();window.scrollTo(0,0);const h=$('#pageTitle');if(h)h.focus({preventScroll:true});}
+function go(p){if(location.hash==='#'+p)route();else location.hash='#'+p;}
+
+/* sidebar toggle */
+function openSidebar(){$('#sidebar').classList.add('open');$('#scrim').classList.add('show');$('#menuBtn').setAttribute('aria-expanded','true');}
+function closeSidebar(){$('#sidebar').classList.remove('open');$('#scrim').classList.remove('show');$('#menuBtn').setAttribute('aria-expanded','false');}
+
+/* =====================================================================
+   Branding / theme / topbar
+   ===================================================================== */
+function applyBranding(){
+  $$('[data-site-name]').forEach(e=>e.textContent=PREFS.siteName);
+  $('#footL').textContent=`${PREFS.siteName} © ${new Date().getFullYear()}. All rights reserved.`;
+  $('#topName').textContent=PREFS.profile.name;$('#topRole').textContent=PREFS.profile.role;
+  $('#topAvatar').innerHTML=avatar(PREFS.profile.name,40);
+  document.title=`${PAGES[currentPage].label} · ${PREFS.siteName}`;
+}
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme',PREFS.theme);
+  $('#themeBtn').innerHTML=icon(PREFS.theme==='dark'?'sun':'moon');
+  $('#themeBtn').setAttribute('aria-label',PREFS.theme==='dark'?'Switch to light mode':'Switch to dark mode');
+}
+function setTheme(t){PREFS.theme=t;savePrefs();applyTheme();if(currentPage==='settings')render();if(currentPage==='dashboard')render();}
+
+/* popovers */
+function closePops(){['bellPop','adminPop'].forEach(id=>{$('#'+id).hidden=true;});$('#bellBtn').setAttribute('aria-expanded','false');$('#adminBtn').setAttribute('aria-expanded','false');$('#gsResults').hidden=true;}
+function drawBell(){
+  const items=DB.notifications.slice().sort((a,b)=>b.created-a.created);
+  $('#bellPop').innerHTML=`<div class="pop-head"><span>Notifications</span></div>`+
+   (items.length?items.map(n=>`<button class="pop-item ${n.read?'':'unread'}" data-act="notif" data-id="${n.id}"><span class="dot ${n.read?'read':''}"></span><span>${esc(n.text)}<small>${ago(n.created)}</small></span></button>`).join(''):`<div class="empty" style="padding:30px">No notifications.</div>`);
+}
+function toggleBell(){const p=$('#bellPop'),open=p.hidden;closePops();if(open){drawBell();p.hidden=false;$('#bellBtn').setAttribute('aria-expanded','true');}}
+function toggleAdmin(){
+  const p=$('#adminPop'),open=p.hidden;closePops();
+  if(open){p.innerHTML=`<div class="pop-head" style="display:block"><div>${esc(PREFS.profile.name)}</div><small style="color:var(--muted);font-weight:400">${esc(PREFS.profile.email)}</small></div>
+   <button class="menu-item" data-act="goset">${icon('gear',18)} Account settings</button>
+   <button class="menu-item" data-act="themeSwap">${icon(PREFS.theme==='dark'?'sun':'moon',18)} ${PREFS.theme==='dark'?'Light':'Dark'} mode</button>
+   <button class="menu-item" data-act="refresh">${icon('reset',18)} Refresh system data</button>
+   <button class="menu-item" data-act="signout">${icon('arrow',18)} Sign out</button>`;
+   p.hidden=false;$('#adminBtn').setAttribute('aria-expanded','true');}
+}
+async function markNotif(id){const n=DB.notifications.find(x=>x.id===id);if(n&&!n.read){try{await apiRequest('/admin/notifications/read',{method:'PATCH',body:JSON.stringify({ids:[id]})});n.read=true;}catch(error){toast(error instanceof Error?error.message:'Notification could not be marked as read.','error');return;}}updateBadges();drawBell();if(currentPage==='dashboard')renderDashboard();}
+async function markAllNotifs(){try{await apiRequest('/admin/notifications/read',{method:'PATCH',body:JSON.stringify({all:true})});DB.notifications.forEach(n=>n.read=true);updateBadges();drawBell();if(currentPage==='dashboard')renderDashboard();toast('All notifications marked as read');}catch(error){toast(error instanceof Error?error.message:'Notifications could not be marked as read.','error');}}
+async function signOutAdmin(){
+  let failure=null;
+  try{await apiRequest('/auth/logout',{method:'POST'});}
+  catch(error){failure=error instanceof Error?error.message:'Sign-out request failed.';}
+  sessionStorage.removeItem('edusphere-access-token');
+  sessionStorage.removeItem('edusphere-user-session');
+  if(failure){showSystemError(`Signed out locally, but the server sign-out request failed: ${failure}`);return;}
+  window.location.assign('/');
+}
+
+/* global search */
+const GS=['students','teachers','courses','subjects','quizzes','assignments'];
+function globalSearch(q){
+  const box=$('#gsResults');q=q.trim().toLowerCase();
+  if(!q){box.hidden=true;return;}
+  const out=[];
+  for(const k of GS){const E=ENT[k];for(const r of DB[k]){if(E.search.some(f=>String(r[f]||'').toLowerCase().includes(q))){out.push([k,r]);if(out.length>=40)break;}}}
+  const shown=out.slice(0,8);
+  box.innerHTML=shown.length?shown.map(([k,r])=>{const m=ENT[k].main(r);return `<button data-act="gsopen" data-ent="${k}" data-id="${r.id}">${ENT[k].avatar==='person'?avatar(m[0],30):`<span class="av icon-av" style="width:30px;height:30px">${icon(ENT[k].icon,16)}</span>`}<span><b>${esc(m[0])}</b><div class="p-sub">${esc(m[1])}</div></span><span class="tag">${ENT[k].singular}</span></button>`;}).join(''):`<div class="none">No results for “${esc(q)}”</div>`;
+  box.hidden=false;
+}
+
+/* =====================================================================
+   Dashboard
+   ===================================================================== */
+function renderDashboard(){
+  const d=new Date(),h=d.getHours(),greet=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
+  const first=PREFS.profile.name.split(' ')[0]||'Admin';
+  const stats=[
+    ['students','Total Students',DB.overview.students||0,'blue','users'],
+    ['teachers','Total Teachers',DB.overview.teachers||0,'green','cap'],
+    ['courses','Total Courses',DB.overview.courses||0,'purple','book'],
+    ['subjects','Total Subjects',DB.overview.subjects||0,'rose','layers'],
+    ['quizzes','Total Quizzes',DB.quizzes.length,'orange','file']];
+  $('#view').innerHTML=`
+  <div class="dash">
+   <div class="dash-main">
+    <div class="hello">
+      <div><h1 id="pageTitle" tabindex="-1">${greet}, ${esc(first)} 👋</h1><p class="sub">Live EduSphere system overview.</p></div>
+      <div class="date-box">${icon('cal',24)}<div><b>${d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</b><span>${d.toLocaleDateString('en-US',{weekday:'long'})}</span></div></div>
+    </div>
+    <div class="stats">${stats.map(s=>`<a class="stat c-${s[3]}" href="#${s[0]}" aria-label="${s[1]}: ${fmt(s[2])}. Open ${s[0]}"><div class="stat-top"><span class="stat-ic">${icon(s[4],20)}</span><span class="stat-l">${s[1]}</span></div><div class="stat-v">${fmt(s[2])}</div><div class="stat-t">Live <span>from EduSphere</span></div></a>`).join('')}</div>
+    <div class="charts">
+      <section class="card card-pad" aria-labelledby="actT">
+        <div class="card-title"><span>${icon('trend',22)}</span><h2 id="actT">System status</h2></div>
+        <p class="card-sub" style="padding-left:34px">Current counts from the system database</p>
+        <div class="timeline" style="margin-top:16px">
+          <div class="tl" style="--c:#22c55e"><i></i><div><b>Published courses</b><small>${fmt(DB.overview.published_courses||0)}</small></div></div>
+          <div class="tl" style="--c:#f59e0b"><i></i><div><b>Draft courses</b><small>${fmt(DB.overview.draft_courses||0)}</small></div></div>
+          <div class="tl" style="--c:#3b82f6"><i></i><div><b>Pending teacher verification</b><small>${fmt(DB.overview.pending_teachers||0)}</small></div></div>
+          <div class="tl" style="--c:#8b5cf6"><i></i><div><b>Published lessons</b><small>${fmt(DB.overview.published_lessons||0)}</small></div></div>
+        </div>
+      </section>
+      <section class="card card-pad" aria-labelledby="catT">
+        <div class="card-title"><span>${icon('pie',22)}</span><h2 id="catT">Course Categories</h2></div><p class="card-sub" style="padding-left:34px">Distribution of all courses</p>
+        <div class="donut-wrap" id="donutWrap"></div>
+      </section>
+    </div>
+    <section class="card act-card" aria-labelledby="raT">
+      <div class="card-title"><span>${icon('clock',22)}</span><h2 id="raT">Activity history</h2></div>
+      <div class="table-wrap" style="margin-top:12px"><table class="t"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>${DB.activities.slice(0,8).map(actRow).join('')||'<tr><td colspan="4">No recorded activity yet.</td></tr>'}</tbody></table></div>
+      ${DB.activities.length>8?'<button class="link-btn" style="margin-top:10px" data-act="allact">View all activity</button>':''}
+    </section>
+   </div>
+   <aside class="dash-side" aria-label="Side panels">
+    <section class="card card-pad" aria-labelledby="ruT">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div class="card-title" style="margin:0"><span>${icon('users',22)}</span><h2 id="ruT">Recent Users</h2></div><button class="link-btn" data-go="students">View all ${icon('arrow',15)}</button></div>
+      <div id="recentUsers" style="margin-top:10px"></div>
+    </section>
+    <section class="card card-pad" aria-labelledby="ucT">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div class="card-title" style="margin:0"><span>${icon('cal',22)}</span><h2 id="ucT">Recent courses</h2></div><button class="link-btn" data-go="courses">View all ${icon('arrow',15)}</button></div>
+      <div class="timeline">${DB.courses.slice(0,4).map(c=>`<div class="tl" style="--c:#3b82f6"><i></i><div><b>${esc(c.name)}</b><small>${esc(c.subject)} · ${esc(c.status)}</small></div></div>`).join('')||'<div class="empty">No courses found.</div>'}</div>
+    </section>
+    <section class="card card-pad" aria-labelledby="ntT">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div class="card-title" style="margin:0"><span>${icon('bell',22)}</span><h2 id="ntT">Notifications</h2></div>${unreadNotifs()?'<button class="link-btn" data-act="readall">Mark all read</button>':''}</div>
+      <div class="timeline" style="margin-top:12px">${DB.notifications.slice(0,5).map(n=>`<button class="tl" style="--c:${n.read?'#94a3b8':'#f59e0b'};border:0;background:none;text-align:left;width:100%;cursor:pointer" data-act="notif" data-id="${n.id}"><i></i><div><b>${esc(n.text)}</b><small>${ago(n.created)}</small></div></button>`).join('')||'<div class="empty">No notifications.</div>'}</div>
+    </section>
+   </aside>
+  </div>`;
+  drawRecentUsers();drawDonut();
+}
+const KIND={quiz:['check','#14b8a6'],course:['plus','#3b82f6'],assign:['file','#6366f1'],lesson:['pencil','#8b5cf6'],enroll:['user','#f59e0b']};
+function actRow(a){const k=KIND[a.kind]||KIND.lesson;
+  return `<tr><td data-label="Time">${ago(a.created)}</td><td data-label="User"><span class="mini-person">${avatar(a.user,22)}${esc(a.user)}</span></td><td data-label="Action"><span><span class="act-ic" style="background:${k[1]}">${icon(k[0],12)}</span>${esc(a.action)}</span></td><td data-label="Details">${esc(a.details)}</td></tr>`;}
+function drawRecentUsers(){
+  const all=DB.students.map(s=>({...s,role:'Student',key:'students'})).concat(DB.teachers.map(t=>({...t,role:'Teacher',key:'teachers'})));
+  const top=all.sort((a,b)=>b.created-a.created).slice(0,5);
+  $('#recentUsers').innerHTML=top.map(u=>`<button class="user-item" data-act="gsopen" data-ent="${u.key}" data-id="${u.id}">${avatar(u.name,46)}<span><b>${esc(u.name)}</b><small>${u.role}</small><small>Joined ${ago(u.created)}</small></span></button>`).join('')||'<div class="empty">No users yet</div>';
+}
+function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x||1)));for(const m of [1,2,3,5,10])if(m*p>=x)return m*p;return 10*p;}
+function drawLine(metric){
+  const n=new Date(),labels=[];for(let i=3;i>=0;i--)labels.push(new Date(n.getFullYear(),n.getMonth()-i,1).toLocaleString('en-US',{month:'short'}));
+  const vals=(metric==='signups'?DB.chart.signups:DB.chart.active).slice();
+  if(metric!=='signups')vals[3]=DB.students.length;
+  $('#actSub').textContent=metric==='signups'?'Monthly new sign-ups':'Monthly active students';
+  const W=640,Hh=300,L=52,R=26,T=24,B=36,iw=W-L-R,ih=Hh-T-B;
+  const step=niceStep(Math.max(...vals,1)/5),max=step*5;
+  const X=i=>L+14+(iw-28)*i/(vals.length-1),Y=v=>T+ih-(v/max)*ih;
+  const pts=vals.map((v,i)=>[X(i),Y(v)]);
+  let d=`M${pts[0][0]},${pts[0][1]}`;
+  for(let i=0;i<pts.length-1;i++){const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||p2;
+    const c1=[p1[0]+(p2[0]-p0[0])/6,p1[1]+(p2[1]-p0[1])/6],c2=[p2[0]-(p3[0]-p1[0])/6,p2[1]-(p3[1]-p1[1])/6];
+    d+=` C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;}
+  const area=`${d} L${pts[pts.length-1][0]},${T+ih} L${pts[0][0]},${T+ih} Z`;
+  let grid='';for(let i=0;i<=5;i++){const v=step*i,y=Y(v);grid+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--border)" stroke-dasharray="3 5"/><text x="${L-10}" y="${y+4}" text-anchor="end" font-size="12" fill="var(--muted)">${fmt(v)}</text>`;}
+  const xl=labels.map((l,i)=>`<text x="${X(i)}" y="${Hh-10}" text-anchor="middle" font-size="12.5" fill="var(--muted)">${l}</text>`).join('');
+  const dots=pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="${i===pts.length-1?6:4.5}" fill="${i===pts.length-1?'#2563eb':'var(--card)'}" stroke="#2563eb" stroke-width="2.5"/><circle class="hit" data-i="${i}" cx="${p[0]}" cy="${p[1]}" r="16" fill="transparent" tabindex="0" role="img" aria-label="${labels[i]}: ${fmt(vals[i])}"/>`).join('');
+  const w=$('#lineWrap');
+  w.innerHTML=`<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Line chart of ${metric==='signups'?'new sign-ups':'active students'} for the last four months"><defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2563eb" stop-opacity=".28"/><stop offset="1" stop-color="#2563eb" stop-opacity=".02"/></linearGradient></defs>${grid}<path d="${area}" fill="url(#ag)"/><path d="${d}" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round"/>${xl}${dots}</svg><div class="tip" id="tip"></div>`;
+  const tip=$('#tip',w);
+  const show=i=>{tip.style.left=(pts[i][0]/W*100)+'%';tip.style.top=(pts[i][1]/Hh*100)+'%';tip.innerHTML=`${labels[i]}<small><b>${fmt(vals[i])}</b> ${metric==='signups'?'sign-ups':'students'}</small>`;};
+  show(vals.length-1);
+  $$('.hit',w).forEach(c=>{const i=+c.dataset.i;c.addEventListener('mouseenter',()=>show(i));c.addEventListener('focus',()=>show(i));});
+}
+const DONUT_COLORS=['#2563eb','#22c55e','#9333ea','#f59e0b','#06b6d4','#94a3b8'];
+function drawDonut(){
+  const total=DB.courses.length,w=$('#donutWrap');
+  if(!total){w.innerHTML='<div class="empty" style="padding:30px">No courses yet</div>';return;}
+  const counts=MAIN_CATS.map(c=>DB.courses.filter(x=>x.subject===c).length);
+  counts.push(total-counts.reduce((a,b)=>a+b,0));
+  const names=[...MAIN_CATS,'Other'],R=70,C=2*Math.PI*R;let off=0;
+  const segs=counts.map((c,i)=>{const len=c/total*C,gap=c?Math.min(3,len*.2):0;const s=`<circle class="seg" cx="100" cy="100" r="${R}" fill="none" stroke="${DONUT_COLORS[i]}" stroke-width="26" stroke-dasharray="${Math.max(len-gap,0)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 100 100)"><title>${names[i]}: ${c} courses</title></circle>`;off+=len;return s;}).join('');
+  w.innerHTML=`<div class="donut"><svg viewBox="0 0 200 200" role="img" aria-label="Donut chart of course distribution">${segs}</svg><div class="donut-c"><b>${fmt(total)}</b><span>Total Courses</span></div></div>
+  <div class="legend">${names.map((n,i)=>`<div><i style="background:${DONUT_COLORS[i]}"></i>${n}<b>${Math.round(counts[i]/total*100)}%</b></div>`).join('')}</div>`;
+}
+function showAllActivities(){
+  const rows=DB.activities.slice().sort((a,b)=>b.created-a.created).map(actRow).join('');
+  openModal(`${mHead('All recent activities')}<div class="m-body"><div class="table-wrap"><table class="t"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>${rows||''}</tbody></table></div></div><div class="m-foot"><button class="btn primary" data-close>Close</button></div>`,'wide');
+  $('.modal').style.maxWidth='860px';
+}
+
+/* =====================================================================
+   Generic CRUD pages
+   ===================================================================== */
+function mainCell(E,r){
+  const m=E.main(r);
+  const av=E.avatar==='person'?avatar(m[0],36):`<span class="av icon-av">${icon(E.icon,18)}</span>`;
+  return `<div class="person">${av}<div><div class="p-name">${esc(m[0])}</div>${m[1]?`<div class="p-sub">${esc(m[1])}</div>`:''}</div></div>`;
+}
+function renderEntity(key){
+  const E=ENT[key],S=UI[key]||(UI[key]={q:'',f:{},page:1});
+  $('#view').dataset.ent=key;
+  if(!['students','teachers','schools','courses','subjects','quizzes','assignments','results'].includes(key)){
+    $('#view').innerHTML=`<div class="page-head"><div><h1 id="pageTitle" tabindex="-1">${E.plural}</h1><p class="sub">${E.desc}</p></div></div><section class="card card-pad" role="status"><div class="notice">${icon('info',18)}<div>This section is not connected to the current EduSphere system API. No sample records are shown.</div></div></section>`;
+    return;
+  }
+  $('#view').innerHTML=`
+  <div class="page-head"><div><h1 id="pageTitle" tabindex="-1">${E.plural}</h1><p class="sub">${E.desc} <span class="chip">Live system data</span></p></div>${['teachers','schools','courses','subjects','quizzes','assignments'].includes(key)?`<button class="btn primary" data-act="create">${icon('plus',18)} Add ${E.singular.toLowerCase()}</button>`:''}</div>
+  <section class="card" aria-label="${E.plural} list">
+   <div class="toolbar">
+    <label class="sbox">${icon('search',18)}<input id="q" type="search" placeholder="Search by ${E.hint}" aria-label="Search ${E.plural.toLowerCase()}" value="${esc(S.q)}" autocomplete="off"></label>
+    ${E.filters.map(f=>`<select data-filter="${f.k}" aria-label="Filter by ${f.k}"><option value="">${f.l}</option>${f.opts().map(o=>`<option ${S.f[f.k]===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`).join('')}
+    <button class="btn sm" data-act="clear">Clear filters</button>
+    <span class="count" id="count" aria-live="polite"></span>
+   </div>
+   <div id="tbl"></div><div id="pager"></div>
+  </section>`;
+  drawTable(key);
+}
+function filtered(key){
+  const E=ENT[key],S=UI[key],q=S.q.trim().toLowerCase();
+  return DB[key].filter(r=>{
+    if(q&&!E.search.some(k=>String(r[k]==null?'':r[k]).toLowerCase().includes(q)))return false;
+    for(const k in S.f)if(S.f[k]&&r[k]!==S.f[k])return false;
+    return true;
+  });
+}
+const PER=10;
+function drawTable(key){
+  const E=ENT[key],S=UI[key],list=filtered(key),pages=Math.max(1,Math.ceil(list.length/PER));
+  if(S.page>pages)S.page=pages;
+  const slice=list.slice((S.page-1)*PER,S.page*PER);
+  $('#count').textContent=`${fmt(list.length)} ${(list.length===1?E.singular:E.plural).toLowerCase()}`;
+  let html;
+  if(!DB[key].length){
+    html=`<div class="empty"><div class="eic">${icon(E.icon,30)}</div><h3>No ${E.plural.toLowerCase()} found</h3><p>The connected system returned no records.</p></div>`;
+  }else if(!list.length){
+    html=`<div class="empty"><div class="eic">${icon('search',30)}</div><h3>No matching ${E.plural.toLowerCase()}</h3><p>Try a different search term or clear the filters.</p><button class="btn" data-act="clear">Clear search &amp; filters</button></div>`;
+  }else{
+    html=`<div class="table-wrap"><table class="t"><thead><tr><th>${E.mainLabel}</th>${E.cols.map(c=>`<th>${c[0]}</th>`).join('')}<th class="ta-r">Actions</th></tr></thead><tbody>${slice.map(r=>{
+      const t=esc(E.main(r)[0]);
+          const statusAction=key==='students'||key==='teachers'||key==='schools'||(CMS_TYPES.has(key)&&key!=='subjects');
+          const actionLabel=key==='students'?(r._rawStatus==='active'?'Suspend user':'Activate user'):key==='teachers'?(['approved','verified'].includes(String(r._rawStatus).toLowerCase())?'Suspend teacher':'Approve teacher'):key==='schools'?(r._rawStatus==='active'?'Deactivate school':'Activate school'):(r._rawStatus==='published'?'Unpublish':'Publish');
+      return `<tr><td data-label="${E.mainLabel}">${mainCell(E,r)}</td>${E.cols.map(c=>`<td data-label="${c[0]}">${c[1](r)}</td>`).join('')}<td class="actions" data-label="Actions"><button class="icon-btn" data-act="view" data-id="${r.id}" aria-label="View ${t}" title="View">${icon('eye',18)}</button>${statusAction?`<button class="icon-btn" data-act="status" data-id="${r.id}" aria-label="${actionLabel} ${t}" title="${actionLabel}">${icon('check',18)}</button>`:''}${(CMS_TYPES.has(key)||key==='schools')?`<button class="icon-btn danger" data-act="del" data-id="${r.id}" aria-label="Delete ${t}" title="Delete">${icon('trash',18)}</button>`:''}</td></tr>`;}).join('')}</tbody></table></div>`;
+  }
+  $('#tbl').innerHTML=html;
+  $('#pager').innerHTML=list.length>PER?pagerHtml(S.page,pages,list.length):'';
+}
+function pagerHtml(p,pages,total){
+  const nums=[];for(let i=1;i<=pages;i++)if(i===1||i===pages||Math.abs(i-p)<=1)nums.push(i);
+  const out=[];nums.forEach((n,i)=>{if(i&&n-nums[i-1]>1)out.push('…');out.push(n);});
+  return `<div class="pager"><span>Showing ${fmt((p-1)*PER+1)}–${fmt(Math.min(p*PER,total))} of ${fmt(total)}</span><nav class="pages" aria-label="Pagination"><button data-page-go="${p-1}" ${p<=1?'disabled':''} aria-label="Previous page">${icon('left',16)}</button>${out.map(n=>n==='…'?'<span style="padding:6px">…</span>':`<button data-page-go="${n}" ${n===p?'aria-current="page"':''} aria-label="Page ${n}">${n}</button>`).join('')}<button data-page-go="${p+1}" ${p>=pages?'disabled':''} aria-label="Next page">${icon('right',16)}</button></nav></div>`;
+}
+function fieldHtml(f,val){
+  const id='f_'+f.k,v=val==null?'':val;let ctl;
+  const common=`id="${id}" name="${f.k}" ${f.req?'aria-required="true"':''} aria-describedby="e_${f.k}"`;
+  if(f.t==='select'){const o=f.opts(),all=v!==''&&!o.includes(v)?[...o,v]:o;ctl=`<select ${common}><option value="">Select…</option>${all.map(x=>`<option value="${esc(x)}" ${x===v?'selected':''}>${esc(x)}</option>`).join('')}</select>`;}
+  else if(f.t==='textarea')ctl=`<textarea ${common} maxlength="${f.maxlen||500}">${esc(v)}</textarea>`;
+  else if(f.t==='student')ctl=`<input ${common} type="text" list="stuList" value="${esc(v)}" placeholder="${esc(f.ph||'')}" autocomplete="off">`;
+  else ctl=`<input ${common} type="${f.t}" value="${esc(v)}" ${f.ph?`placeholder="${esc(f.ph)}"`:''} ${f.min!=null?`min="${f.min}"`:''} ${f.max!=null?`max="${f.max}"`:''} ${f.maxlen?`maxlength="${f.maxlen}"`:''}>`;
+  return `<div class="field ${f.full?'full':''}"><label for="${id}">${esc(f.l)}${f.req?' <span class="req" aria-hidden="true">*</span>':''}</label>${ctl}<div class="err" id="e_${f.k}" role="alert"></div></div>`;
+}
+function openForm(key,id){
+  const E=ENT[key],rec=id?find(key,id):null;
+  if(id&&!rec){toast('That record no longer exists.','error');return;}
+  const dl=E.fields.some(f=>f.t==='student')?`<datalist id="stuList">${DB.students.map(s=>`<option value="${esc(s.name)}"></option>`).join('')}</datalist>`:'';
+  openModal(`${mHead((rec?'Edit ':'Add ')+E.singular)}
+  <form id="recForm" novalidate data-key="${key}" data-id="${rec?rec.id:''}"><div class="m-body"><div class="fgrid">${E.fields.map(f=>fieldHtml(f,rec?rec[f.k]:(f.def!=null?f.def:''))).join('')}</div>${dl}<p class="hint" style="margin-top:12px"><span class="req">*</span> Required fields. Data is saved in this browser only.</p></div>
+  <div class="m-foot"><button type="button" class="btn" data-close>Cancel</button><button type="submit" class="btn primary">${icon('check',18)} ${rec?'Save changes':'Add '+E.singular}</button></div></form>`);
+}
+function createSelectOptions(rows,label){
+  return rows.map(row=>`<option value="${esc(row.id)}">${esc(label(row))}</option>`).join('');
+}
+function createField(name,label,type='text',required=true,extra=''){
+  return `<div class="field ${type==='textarea'?'full':''}"><label for="c_${name}">${esc(label)}${required?' <span class="req" aria-hidden="true">*</span>':''}</label>${type==='textarea'?`<textarea id="c_${name}" name="${name}" ${required?'required':''} ${extra}></textarea>`:`<input id="c_${name}" name="${name}" type="${type}" ${required?'required':''} ${extra}>`}<div class="err" id="e_${name}" role="alert"></div></div>`;
+}
+function createSelect(name,label,rows,rowLabel,required=true){
+  return `<div class="field"><label for="c_${name}">${esc(label)}${required?' <span class="req" aria-hidden="true">*</span>':''}</label><select id="c_${name}" name="${name}" ${required?'required':''}><option value="">Select…</option>${createSelectOptions(rows,rowLabel)}</select><div class="err" id="e_${name}" role="alert"></div></div>`;
+}
+function createProgramSelect(){
+  return `<div class="field"><label for="c_programId">Program</label><select id="c_programId" name="programId"><option value="">No program</option>${createSelectOptions(DB.taxonomyPrograms||[],p=>p.name)}</select></div>`;
+}
+function openCreateForm(type){
+  let contents='';
+  if(type==='courses'){
+    contents=createField('title','Course name')+createSelect('teacherId','Teacher',DB.teachers.filter(t=>t.userStatus==='active'),t=>`${t.name} (${t.email})`)+createSelect('educationLevelId','Education level',DB.taxonomyLevels||[],item=>item.name)+createSelect('gradeId','Grade',DB.taxonomyGrades||[],item=>item.name)+createProgramSelect()+createSelect('subjectId','Subject',DB.subjects,s=>s.name)+createField('description','Description','textarea',false)+`<div class="field"><label for="c_difficulty">Difficulty</label><select id="c_difficulty" name="difficulty"><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select></div>`;
+  }else if(type==='teachers'){
+    contents=createField('fullName','Full name')+createField('email','Email','email')+createField('bio','Biography','textarea',false);
+  }else if(type==='subjects'){
+    contents=createField('name','Subject name')+createSelect('educationLevelId','Education level',DB.taxonomyLevels||[],item=>item.name)+createSelect('gradeId','Grade',DB.taxonomyGrades||[],item=>item.name)+createProgramSelect()+createField('description','Description','textarea',false);
+  }else if(type==='quizzes'){
+    contents=createField('title','Quiz title')+createSelect('courseId','Course',DB.courses,c=>c.name)+createField('timeLimitSeconds','Time limit in minutes','number',false,'min="1" max="600"');
+  }else if(type==='assignments'){
+    contents=createField('title','Assignment title')+createSelect('courseId','Course',DB.courses,c=>`${c.name} — ${c.teacher}`)+createField('dueAt','Due date and time','datetime-local')+createField('instructions','Instructions','textarea')+createField('totalMarks','Total marks','number',true,'min="1" max="10000" value="100"');
+  }else if(type==='schools'){
+    contents=createField('name','School name')+createField('location','Location', 'text',false)+createField('phone','Contact phone','tel',false)+createField('email','Contact email','email')+`<div class="field"><label for="c_status">Status</label><select id="c_status" name="status"><option value="pending">Pending</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>`;
+  }
+  if(!contents){toast('This record type cannot be created from the dashboard.','error');return;}
+  openModal(`${mHead(`Add ${ENT[type].singular.toLowerCase()}`)}<form id="systemCreateForm" data-type="${type}" novalidate><div class="m-body"><div class="fgrid">${contents}</div><p class="hint" style="margin-top:12px">Changes are saved to EduSphere.</p></div><div class="m-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary" type="submit">${icon('check',18)} Create</button></div></form>`);
+}
+async function submitSystemCreate(form){
+  const type=form.dataset.type,data=Object.fromEntries(new FormData(form).entries());
+  if(type==='courses'||type==='subjects'){
+    const subject=type==='courses'?DB.subjects.find(row=>String(row.id)===String(data.subjectId)):null;
+    if(type==='courses'&&subject){
+      data.programId=subject.program_id?String(subject.program_id):data.programId||'';
+      if(subject.education_level_id)data.educationLevelId=String(subject.education_level_id);
+      if(subject.grade_id)data.gradeId=String(subject.grade_id);
+    }
+    const level=(DB.taxonomyLevels||[]).find(row=>String(row.id)===String(data.educationLevelId));
+    const grade=(DB.taxonomyGrades||[]).find(row=>String(row.id)===String(data.gradeId));
+    if(!level||!grade||String(grade.education_level_id)!==String(level.id)){
+      toast('Choose a grade that belongs to the selected education level.','error');return;
+    }
+    if(type==='courses'&&subject&&(String(subject.education_level_id)!==String(level.id)||String(subject.grade_id)!==String(grade.id)||String(subject.program_id||'')!==String(data.programId||''))){
+      toast('Choose a subject that matches the selected level, grade, and program.','error');return;
+    }
+    if(!data.programId)delete data.programId;
+  }
+  if(type==='courses'){data.status='draft';}
+  if(type==='quizzes'||type==='assignments'){
+    const course=DB.courses.find(row=>String(row.id)===String(data.courseId));
+    if(course){
+      data.educationLevelId=String(course.education_level_id);
+      data.gradeId=String(course.grade_id);
+      data.subjectId=String(course.subject_id);
+      if(course.program_id)data.programId=String(course.program_id);
+      if(type==='assignments')data.teacherId=String(course.teacher_id);
+    }
+  }
+  if(type==='quizzes'){data.status='draft';if(data.timeLimitSeconds)data.timeLimitSeconds=String(Number(data.timeLimitSeconds)*60);}
+  if(type==='assignments'){data.status='draft';data.totalMarks=Number(data.totalMarks);if(data.dueAt)data.dueAt=new Date(data.dueAt).toISOString();}
+  try{
+    const path=type==='schools'?'/admin/schools':type==='teachers'?'/admin/teachers':`/admin/content/${type}`;
+    await apiRequest(path,{method:'POST',body:JSON.stringify(data)});
+    closeModal();await connectSystem();render();toast(`${ENT[type].singular} created successfully.`);
+  }catch(error){toast(error instanceof Error?error.message:`${ENT[type].singular} could not be created.`,'error');}
+}
+function renderClasses(){
+  const rows=DB.classes.slice().sort((a,b)=>a.startsAt-b.startsAt);
+  $('#view').innerHTML=`<div class="page-head"><div><h1 id="pageTitle" tabindex="-1">Class schedule</h1><p class="sub">Upcoming classes scheduled in EduSphere.</p></div><button class="btn primary" data-act="scheduleClass">${icon('plus',18)} Schedule class</button></div><section class="card"><div class="table-wrap"><table class="t"><thead><tr><th>Course</th><th>Teacher</th><th>Starts</th><th>Ends</th><th>Room</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${esc(row.title)}</td><td>${esc(row.teacher)}</td><td>${esc(new Date(row.startsAt).toLocaleString())}</td><td>${esc(new Date(row.endsAt).toLocaleString())}</td><td>${esc(row.room||'—')}</td></tr>`).join('')||'<tr><td colspan="5">No upcoming classes are scheduled.</td></tr>'}</tbody></table></div></section>`;
+}
+function openScheduleForm(){
+  const now=new Date(Date.now()+3600000),later=new Date(now.getTime()+3600000);
+  const local=value=>new Date(value.getTime()-value.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  openModal(`${mHead('Schedule a class')}<form id="scheduleForm" novalidate><div class="m-body"><div class="fgrid">${createSelect('courseId','Course',DB.courses,c=>c.name)}${createField('startsAt','Starts','datetime-local',true,`value="${local(now)}"`)}${createField('endsAt','Ends','datetime-local',true,`value="${local(later)}"`)}${createField('room','Room or meeting link','text',false)}</div></div><div class="m-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary" type="submit">${icon('check',18)} Schedule</button></div></form>`);
+}
+async function submitSchedule(form){
+  const data=Object.fromEntries(new FormData(form).entries());
+  const course=DB.courses.find(row=>row.id===data.courseId);
+  if(course)data.teacherId=course.teacher_id;
+  data.startsAt=new Date(data.startsAt).toISOString();data.endsAt=new Date(data.endsAt).toISOString();
+  try{await apiRequest('/admin/classes',{method:'POST',body:JSON.stringify(data)});closeModal();await connectSystem();render();toast('Class scheduled successfully.');}
+  catch(error){toast(error instanceof Error?error.message:'Class could not be scheduled.','error');}
+}
+function validate(E,form,rec){
+  const data={},errs={};
+  E.fields.forEach(f=>{
+    let v=(form.elements[f.k].value||'').trim(),e='';
+    if(f.req&&!v)e=`${f.l} is required.`;
+    else if(v){
+      if(f.t==='email'&&!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v))e='Enter a valid email address.';
+      else if(f.t==='email'&&f.unique&&DB[E.key].some(r=>(!rec||r.id!==rec.id)&&String(r.email).toLowerCase()===v.toLowerCase()))e='This email is already in use.';
+      else if(f.t==='number'){const n=Number(v);if(!Number.isFinite(n))e='Enter a valid number.';else if(f.min!=null&&n<f.min)e=`Minimum value is ${f.min}.`;else if(f.max!=null&&n>f.max)e=`Maximum value is ${f.max}.`;else v=n;}
+      else if(f.t==='tel'&&!/^[+\d][\d\s().-]{5,}$/.test(v))e='Enter a valid phone number.';
+      else if(f.t==='student'&&!DB.students.some(s=>s.name.toLowerCase()===v.toLowerCase()))e='Choose an existing student from the list.';
+      else if(f.t==='date'&&isNaN(Date.parse(v)))e='Enter a valid date.';
+    }
+    if(e)errs[f.k]=e;data[f.k]=v;
+  });
+  if(E.check)E.check(data,errs);
+  return {data,errs};
+}
+function submitForm(form){
+  const key=form.dataset.key,E=ENT[key],rec=form.dataset.id?find(key,form.dataset.id):null;
+  const {data,errs}=validate(E,form,rec);
+  E.fields.forEach(f=>{const el=$('#e_'+f.k,form),inp=form.elements[f.k];el.textContent=errs[f.k]||'';if(errs[f.k])inp.setAttribute('aria-invalid','true');else inp.removeAttribute('aria-invalid');});
+  const bad=Object.keys(errs);
+  if(bad.length){form.elements[bad[0]].focus();toast('Please fix the highlighted fields.','error');return;}
+  let saved;
+  if(rec){Object.assign(rec,data);if(E.after)E.after(rec);saved=rec;toast(`${E.singular} updated successfully.`);logActivity(PREFS.profile.name,`Updated a ${E.singular.toLowerCase()}`,E.kind,E.main(rec)[0]);}
+  else{saved={id:nextId(key),...data,created:Date.now()};if(E.after)E.after(saved);DB[key].unshift(saved);
+    const S=UI[key]||(UI[key]={q:'',f:{},page:1});S.q='';S.f={};S.page=1;
+    toast(`${E.singular} added successfully.`);logActivity(PREFS.profile.name,`Added a ${E.singular.toLowerCase()}`,E.kind,E.main(saved)[0]);}
+  saveDB();closeModal();render();
+}
+function openView(key,id){
+  const E=ENT[key],r=find(key,id);
+  if(!r){toast('That record no longer exists.','error');return;}
+  const rows=[['ID',esc(r.id)]];
+  E.fields.forEach(f=>{let v=r[f.k];let out;
+    if(f.k==='status')out=badge(v);else if(f.t==='date')out=esc(v?fmtDate(v):'—');else out=esc(v===''||v==null?'—':v);
+    rows.push([f.l,out]);});
+  if(E.extra)rows.push(...E.extra(r));
+  rows.push([key==='students'||key==='teachers'?'Joined':'Added',r.created?esc(fmtDate(r.created))+` <span class="p-sub">(${ago(r.created)})</span>`:'—']);
+  const m=E.main(r);
+  openModal(`${mHead(E.singular+' details')}<div class="m-body"><div class="detail-head">${E.avatar==='person'?avatar(m[0],56):`<span class="av icon-av" style="width:56px;height:56px">${icon(E.icon,26)}</span>`}<div><div style="font-size:18px;font-weight:700">${esc(m[0])}</div><div class="p-sub">${esc(m[1]||E.singular)}</div></div></div>
+  <dl class="dl">${rows.map(x=>`<dt>${x[0]}</dt><dd>${x[1]}</dd>`).join('')}</dl></div>
+  <div class="m-foot"><button class="btn" data-close>Close</button></div>`);
+}
+function askDelete(key,id){
+  const E=ENT[key],r=find(key,id);if(!r)return;
+  confirmDialog({title:`Delete ${E.singular.toLowerCase()}?`,message:`Are you sure you want to delete <b>${esc(E.main(r)[0])}</b> from EduSphere? This action cannot be undone.`,confirmText:'Delete'},async()=>{
+    try{await apiRequest(key==='schools'?`/admin/schools/${encodeURIComponent(id)}`:`/admin/content/${key}/${encodeURIComponent(id)}`,{method:'DELETE'});await connectSystem();render();toast(`${E.singular} deleted.`);}
+    catch(error){toast(error instanceof Error?error.message:'The record could not be deleted.','error');}
+  });
+}
+async function updateSystemStatus(key,id){
+  const row=find(key,id);if(!row)return;
+  let path,status;
+  if(key==='students'){path=`/admin/users/${encodeURIComponent(id)}/status`;status=row._rawStatus==='active'?'suspended':'active';}
+  else if(key==='teachers'){path=`/admin/teachers/${encodeURIComponent(id)}/status`;status=['approved','verified'].includes(String(row._rawStatus).toLowerCase())?'suspended':'approved';}
+  else if(key==='schools'){path=`/admin/schools/${encodeURIComponent(id)}`;status=row._rawStatus==='active'?'inactive':'active';}
+  else if(CMS_TYPES.has(key)&&key!=='subjects'){path=`/admin/content/${key}/${encodeURIComponent(id)}/status`;status=row._rawStatus==='published'?'draft':'published';}
+  else return;
+  const label=key==='students'?(status==='active'?'activate':'suspend'):key==='teachers'?(status==='approved'?'approve':'suspend'):key==='schools'?(status==='active'?'activate':'deactivate'):status==='published'?'publish':'unpublish';
+  confirmDialog({title:`${label.charAt(0).toUpperCase()+label.slice(1)} ${ENT[key].singular.toLowerCase()}?`,message:`Apply this change to <b>${esc(ENT[key].main(row)[0])}</b> in EduSphere?`,confirmText:label.charAt(0).toUpperCase()+label.slice(1)},async()=>{
+    try{await apiRequest(path,{method:'PATCH',body:JSON.stringify({status})});await connectSystem();render();toast(`${ENT[key].singular} status updated.`);}
+    catch(error){toast(error instanceof Error?error.message:'The status could not be updated.','error');}
+  });
+}
+
+/* =====================================================================
+   Messages
+   ===================================================================== */
+let msgSel=null,msgQ='';
+function lastTs(c){return c.msgs.length?c.msgs[c.msgs.length-1].ts:0;}
+function renderMessages(){
+  $('#view').innerHTML=`<div class="page-head"><div><h1 id="pageTitle" tabindex="-1">Messages</h1><p class="sub">Conversations with active students and teachers.</p></div><button class="btn primary" data-act="newmsg">${icon('plus',18)} New message</button></div><section class="card msg-wrap" id="msgWrap"><div class="msg-list"><div class="msg-tools"><label class="sbox">${icon('search',18)}<input id="mq" type="search" placeholder="Search conversations" aria-label="Search conversations" value="${esc(msgQ)}"></label></div><div id="convList"></div></div><div class="msg-thread" id="thread"></div></section>`;
+  drawConvs();drawThread();
+}
+function drawConvs(){
+  const q=msgQ.trim().toLowerCase();
+  const list=DB.conversations.filter(c=>!q||c.name.toLowerCase().includes(q)||c.msgs.some(m=>m.text.toLowerCase().includes(q))).sort((a,b)=>lastTs(b)-lastTs(a));
+  $('#convList').innerHTML=list.length?list.map(c=>{const l=c.msgs[c.msgs.length-1];return `<button class="conv ${c.unread?'unread':''} ${c.id===msgSel?'active':''}" data-act="conv" data-id="${c.id}" aria-label="${esc(c.name)}${c.unread?', unread':''}">${avatar(c.name,42)}<span class="meta"><span class="row1"><span class="p-name">${esc(c.name)}</span><span>${ago(lastTs(c))}</span></span><span class="prev" style="display:block">${l?(l.me?'You: ':'')+esc(l.text):'No messages'}</span></span>${c.unread?'<span class="udot" title="Unread"></span>':''}</button>`;}).join(''):`<div class="empty"><div class="eic">${icon('inbox',28)}</div><h3>${DB.conversations.length?'No matches':'No conversations'}</h3><p>${DB.conversations.length?'Try a different search.':'Start one with “New message”.'}</p></div>`;
+}
+function drawThread(){
+  const c=DB.conversations.find(x=>x.id===msgSel),el=$('#thread');
+  if(!c){el.innerHTML=`<div class="empty" style="margin:auto"><div class="eic">${icon('mail',28)}</div><h3>Select a conversation</h3><p>Choose a conversation from the list or write a new message.</p><button class="btn primary" data-act="newmsg">${icon('plus',18)} New message</button></div>`;return;}
+  el.innerHTML=`<div class="th-head"><button class="icon-btn back-btn" data-act="backmsg" aria-label="Back to conversations">${icon('left')}</button>${avatar(c.name,40)}<div><div class="p-name">${esc(c.name)}</div><div class="p-sub">${esc(c.role)}</div></div></div>
+  <div class="th-body" id="thBody">${c.msgs.map(m=>`<div class="bubble ${m.me?'me':''}">${esc(m.text)}<small>${fmtTime(m.ts)}</small></div>`).join('')}</div>
+  <form class="reply" id="replyForm" novalidate><input id="replyIn" type="text" placeholder="Write a reply…" aria-label="Reply message" maxlength="500" autocomplete="off"><button class="btn primary" type="submit" aria-label="Send reply">${icon('send',18)}<span>Send</span></button></form>`;
+  const b=$('#thBody');b.scrollTop=b.scrollHeight;
+}
+function openConv(id){
+  const c=DB.conversations.find(x=>x.id===id);if(!c)return;
+  msgSel=id;if(c.unread){void apiRequest(`/messages/${encodeURIComponent(id)}/read`,{method:'PATCH'}).then(()=>{c.unread=false;updateBadges();drawConvs();}).catch(error=>toast(error instanceof Error?error.message:'Messages could not be marked as read.','error'));}
+  updateBadges();drawConvs();drawThread();$('#msgWrap').classList.add('show-thread');
+}
+function openCompose(){
+  const contacts=DB.teachers.filter(t=>t.userStatus==='active').map(t=>({id:t.id,name:t.name,role:'Teacher'})).concat(DB.students.filter(s=>s._rawStatus==='active').map(s=>({id:s.id,name:s.name,role:'Student'})));
+  openModal(`${mHead('New message')}<form id="composeForm" novalidate><div class="m-body"><div class="fgrid">
+   <div class="field full"><label for="c_to">To <span class="req" aria-hidden="true">*</span></label><select id="c_to" name="to" required><option value="">Select a student or teacher…</option>${createSelectOptions(contacts,c=>`${c.name} (${c.role})`)}</select></div>
+   <div class="field full"><label for="c_subject">Subject</label><input id="c_subject" name="subject" maxlength="160"></div>
+   <div class="field full"><label for="c_msg">Message <span class="req" aria-hidden="true">*</span></label><textarea id="c_msg" name="msg" maxlength="5000" required></textarea><div class="err" id="e_msg" role="alert"></div></div></div>
+   <p class="hint" style="margin-top:10px">Messages are stored in EduSphere and the recipient receives a system notification.</p></div>
+   <div class="m-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary" type="submit">${icon('send',16)} Send</button></div></form>`);
+}
+async function submitCompose(form){
+  const recipientId=form.elements.to.value,body=form.elements.msg.value.trim(),subject=form.elements.subject.value.trim();
+  if(!recipientId||!body){toast('Choose a recipient and enter a message.','error');return;}
+  try{
+    const result=await apiRequest('/messages',{method:'POST',body:JSON.stringify({recipientId,subject,body})});
+    closeModal();await connectSystem();msgSel=result.data.conversationId;msgQ='';render();$('#msgWrap')?.classList.add('show-thread');toast('Message sent.');
+  }catch(error){toast(error instanceof Error?error.message:'Message could not be sent.','error');}
+}
+async function submitReply(form){
+  const input=$('#replyIn'),body=input.value.trim(),conversationId=msgSel;
+  if(!body){toast('Type a message first.','error');input.focus();return;}
+  if(!conversationId)return;
+  try{
+    await apiRequest(`/messages/${encodeURIComponent(conversationId)}/messages`,{method:'POST',body:JSON.stringify({body})});
+    await connectSystem();msgSel=conversationId;renderMessages();$('#msgWrap').classList.add('show-thread');$('#replyIn').focus();updateBadges();
+  }catch(error){toast(error instanceof Error?error.message:'Reply could not be sent.','error');}
+}
+
+/* =====================================================================
+   Settings
+   ===================================================================== */
+function storageSize(){const a=lsGet(KEY);return a?(a.length/1024).toFixed(0)+' KB':'0 KB';}
+function renderSettings(){
+  const p=PREFS.profile;
+  $('#view').innerHTML=`<div class="page-head"><div><h1 id="pageTitle" tabindex="-1">Settings</h1><p class="sub">Manage your profile, branding and preferences.</p></div></div>
+  <div class="set-grid">
+   <section class="card card-pad" aria-labelledby="s1"><div class="card-title"><span>${icon('user',22)}</span><h2 id="s1">Admin profile</h2></div>
+    <dl class="dl" style="margin-top:14px"><dt>Name</dt><dd>${esc(p.name)}</dd><dt>Email</dt><dd>${esc(p.email)}</dd><dt>Role</dt><dd>${esc(p.role)}</dd></dl>
+    <p class="card-sub" style="margin-top:12px">Profile details come from your signed-in EduSphere account.</p></section>
+   <section class="card card-pad" aria-labelledby="s2"><div class="card-title"><span>${icon('school',22)}</span><h2 id="s2">Website name</h2></div>
+    <p class="card-sub" style="margin:4px 0 14px">EduSphere branding is managed by the system.</p><b>${esc(PREFS.siteName)}</b></section>
+   <section class="card card-pad" aria-labelledby="s3"><div class="card-title"><span>${icon('gear',22)}</span><h2 id="s3">Preferences</h2></div>
+    <div class="set-row"><div><b>Dark mode</b><small>Switch between light and dark themes.</small></div><button class="switch" role="switch" aria-checked="${PREFS.theme==='dark'}" aria-label="Dark mode" data-act="toggleTheme"></button></div>
+    <p class="card-sub" style="margin-top:14px">Notification preferences are not available from the current system API.</p></section>
+   <section class="card card-pad" aria-labelledby="s4"><div class="card-title"><span>${icon('reset',22)}</span><h2 id="s4">System connection</h2></div>
+    <p class="card-sub" style="margin:8px 0 14px">This dashboard uses the authenticated EduSphere API. Changes are saved to the system database.</p>
+    <button class="btn" data-act="refresh">${icon('reset',16)} Refresh system data</button></section>
+  </div>`;
+}
+function submitProfile(f){
+  const name=f.elements.name.value.trim(),email=f.elements.email.value.trim(),role=f.elements.role.value.trim()||'Administrator';let ok=true;
+  const en=name.length<2?'Name must be at least 2 characters.':'',ee=!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)?'Enter a valid email address.':'';
+  $('#e_pname').textContent=en;$('#e_pemail').textContent=ee;
+  f.elements.name.setAttribute('aria-invalid',en?'true':'false');f.elements.email.setAttribute('aria-invalid',ee?'true':'false');
+  if(en||ee){toast('Please fix the highlighted fields.','error');(en?f.elements.name:f.elements.email).focus();return;}
+  PREFS.profile={name,email,role};savePrefs();applyBranding();toast('Profile saved.');
+}
+function submitSite(f){
+  const v=f.elements.site.value.trim(),e=v.length<2?'Website name must be at least 2 characters.':'';
+  $('#e_site').textContent=e;f.elements.site.setAttribute('aria-invalid',e?'true':'false');
+  if(e){toast(e,'error');f.elements.site.focus();return;}
+  PREFS.siteName=v;savePrefs();applyBranding();toast('Website name updated.');
+}
+function resetDemo(){
+  confirmDialog({title:'Reset demo data?',message:'This replaces <b>all</b> records you have added or edited with the original sample data. Your profile and theme preferences are kept. This cannot be undone.',confirmText:'Reset data'},()=>{
+    lsDel(KEY);DB=seed();saveDB();UI={};msgSel=null;msgQ='';render();applyBranding();toast('Demo data has been reset.');
+  });
+}
+
+/* =====================================================================
+   Event wiring (delegated)
+   ===================================================================== */
+async function init(){
+  loadPrefs();loadDB();
+  buildNav();
+  $('#menuBtn').innerHTML=icon('menu',24);$('#gsIcon').innerHTML=icon('search',18);
+  $('#bellBtn').innerHTML=icon('bell',22)+'<span class="bell-badge" id="bellBadge" hidden></span>';
+  $('#chev').innerHTML=icon('down',16);
+  applyTheme();
+
+  $('#menuBtn').addEventListener('click',()=>$('#sidebar').classList.contains('open')?closeSidebar():openSidebar());
+  $('#scrim').addEventListener('click',closeSidebar);
+  $('#themeBtn').addEventListener('click',()=>setTheme(PREFS.theme==='dark'?'light':'dark'));
+  $('#bellBtn').addEventListener('click',e=>{e.stopPropagation();toggleBell();});
+  $('#adminBtn').addEventListener('click',e=>{e.stopPropagation();toggleAdmin();});
+  $('#gsInput').addEventListener('input',e=>globalSearch(e.target.value));
+  $('#gsInput').addEventListener('keydown',e=>{if(e.key==='Enter'){const b=$('#gsResults button');if(b)b.click();}});
+  window.addEventListener('hashchange',route);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){if($('#modalRoot').innerHTML)closeModal();else{closePops();closeSidebar();}}
+    if(e.key==='Tab'&&$('#modalRoot .modal')){
+      const f=$$('#modalRoot a[href],#modalRoot button:not([disabled]),#modalRoot input,#modalRoot select,#modalRoot textarea').filter(x=>x.offsetParent!==null);
+      if(!f.length)return;const a=f[0],z=f[f.length-1];
+      if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus();}
+      else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus();}
+    }
+  });
+  document.addEventListener('click',e=>{
+    const t=e.target;
+    if(!t.closest('.pop-wrap')&&!t.closest('#gsearch'))closePops();
+    /* modal close */
+    if(t.id==='overlay'||t.closest('[data-close]')){if($('#modalRoot').innerHTML)closeModal();return;}
+    const go=t.closest('[data-go]');if(go){e.preventDefault();go.dataset.go&&location.hash!=='#'+go.dataset.go?location.hash='#'+go.dataset.go:route();return;}
+    const pg=t.closest('[data-page-go]');
+    if(pg&&!pg.disabled){const k=$('#view').dataset.ent;UI[k].page=+pg.dataset.pageGo;drawTable(k);const tb=$('#tbl');if(tb)tb.scrollIntoView({block:'nearest'});return;}
+    const a=t.closest('[data-act]');if(!a)return;
+    const act=a.dataset.act,id=a.dataset.id,key=$('#view').dataset.ent;
+    switch(act){
+      case 'refresh':closePops();void refreshSystem();break;
+      case 'signout':closePops();void signOutAdmin();break;
+      case 'add':openForm(key);break;
+      case 'create':openCreateForm(key);break;
+      case 'scheduleClass':openScheduleForm();break;
+      case 'edit':openForm(key,id);break;
+      case 'view':openView(key,id);break;
+      case 'status':void updateSystemStatus(key,id);break;
+      case 'del':askDelete(key,id);break;
+      case 'editfromview':openForm(a.dataset.ent,id);break;
+      case 'clear':{const S=UI[key];S.q='';S.f={};S.page=1;renderEntity(key);break;}
+      case 'gsopen':closePops();$('#gsInput').value='';openView(a.dataset.ent,id);break;
+      case 'allact':showAllActivities();break;
+      case 'readall':void markAllNotifs();break;
+      case 'notif':void markNotif(id);break;
+      case 'goset':closePops();go('settings');break;
+      case 'themeSwap':closePops();setTheme(PREFS.theme==='dark'?'light':'dark');break;
+      case 'conv':openConv(id);break;
+      case 'backmsg':msgSel=null;$('#msgWrap').classList.remove('show-thread');drawConvs();break;
+      case 'newmsg':openCompose();break;
+      case 'toggleTheme':setTheme(PREFS.theme==='dark'?'light':'dark');toast(`${PREFS.theme==='dark'?'Dark':'Light'} mode enabled.`,'info');break;
+    }
+  });
+  document.addEventListener('submit',e=>{
+    e.preventDefault();const f=e.target;
+    if(f.id==='recForm')submitForm(f);
+    else if(f.id==='systemCreateForm')void submitSystemCreate(f);
+    else if(f.id==='scheduleForm')void submitSchedule(f);
+    else if(f.id==='composeForm')void submitCompose(f);
+    else if(f.id==='profileForm')submitProfile(f);
+    else if(f.id==='siteForm')submitSite(f);
+    else if(f.id==='replyForm')void submitReply(f);
+  });
+  document.addEventListener('input',e=>{
+    const t=e.target;
+    if(t.id==='q'){const k=$('#view').dataset.ent;UI[k].q=t.value;UI[k].page=1;drawTable(k);}
+    else if(t.id==='mq'){msgQ=t.value;drawConvs();}
+  });
+  document.addEventListener('change',e=>{
+    const t=e.target;
+    if(t.dataset&&t.dataset.filter){const k=$('#view').dataset.ent;UI[k].f[t.dataset.filter]=t.value;UI[k].page=1;drawTable(k);}
+    else if(t.id==='metric')drawLine(t.value);
+  });
+  currentPage=pageFromHash();
+  try{await connectSystem();applyBranding();render();}
+  catch(error){const message=error instanceof Error?error.message:'EduSphere system data could not be loaded.';showSystemError(message);}
+}
+void init();
+})();
+</script>
+</body>
+</html>

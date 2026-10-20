@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { pool } from '../db/pool.js'
-import { asyncHandler } from '../errors.js'
-import { requireAuth, requirePermission } from '../middleware/auth.js'
+import { asyncHandler, HttpError } from '../errors.js'
+import { requireAuth, requirePermission, requireRole } from '../middleware/auth.js'
 
 const router = Router()
 router.use(requireAuth)
+router.post('/subjects', requirePermission('subjects.manage'), asyncHandler(async (request, response) => { const input = z.object({ name: z.string().min(2).max(80), description: z.string().max(500).default('') }).parse(request.body); const result = await pool.query('INSERT INTO subjects (name, description, created_by) VALUES ($1, $2, $3) RETURNING id, name, description', [input.name, input.description, request.auth?.userId]); response.status(201).json({ data: result.rows[0] }) }))
 
 async function studentProfile(userId: string) {
     const result = await pool.query('SELECT education_level_id, grade_id, program_id FROM students WHERE user_id = $1', [userId])
@@ -19,8 +20,18 @@ async function canStudentSeeCourse(courseId: string, userId: string) {
     return Boolean(result.rows[0])
 }
 
-router.get('/subjects', asyncHandler(async (_request, response) => { const result = await pool.query('SELECT id, name, description FROM subjects ORDER BY name'); response.json({ data: result.rows }) }))
-router.get('/taxonomy', asyncHandler(async (_request, response) => {
+router.get('/subjects', requireRole('student', 'teacher'), asyncHandler(async (request, response) => {
+    if (request.auth!.role === 'teacher') {
+        const result = await pool.query('SELECT s.id, s.name, s.description FROM subjects s JOIN subject_teachers st ON st.subject_id = s.id WHERE st.teacher_id = $1 ORDER BY s.name', [request.auth!.userId])
+        response.json({ data: result.rows })
+        return
+    }
+    const profile = await studentProfile(request.auth!.userId)
+    if (!profile?.education_level_id) { response.json({ data: [] }); return }
+    const result = await pool.query(`SELECT DISTINCT s.id, s.name, s.description FROM subjects s JOIN courses c ON c.subject_id = s.id WHERE c.status = 'published' AND c.education_level_id = $1 AND c.grade_id IS NOT DISTINCT FROM $2::uuid AND c.program_id IS NOT DISTINCT FROM $3::uuid ORDER BY s.name`, [profile.education_level_id, profile.grade_id, profile.program_id])
+    response.json({ data: result.rows })
+}))
+router.get('/taxonomy', requireRole('student', 'teacher'), asyncHandler(async (_request, response) => {
     const [levels, grades, faculties, programs] = await Promise.all([
         pool.query('SELECT id, name, code, position FROM education_levels ORDER BY position, name'),
         pool.query('SELECT id, education_level_id, name, code, position FROM grades ORDER BY position, name'),
@@ -29,18 +40,21 @@ router.get('/taxonomy', asyncHandler(async (_request, response) => {
     ])
     response.json({ data: { levels: levels.rows, grades: grades.rows, faculties: faculties.rows, programs: programs.rows } })
 }))
+router.use(requireRole('student'))
 router.get('/search', asyncHandler(async (request, response) => {
     const query = z.string().trim().min(2).max(120).parse(request.query.q)
+    const profile = await studentProfile(request.auth!.userId)
+    if (!profile?.education_level_id) { response.json({ data: [] }); return }
     const pattern = `%${query}%`
     const result = await pool.query(`
 		SELECT 'course' AS result_type, c.id, c.title AS title, c.description, s.name AS subject
 		FROM courses c JOIN subjects s ON s.id = c.subject_id
-		WHERE c.status = 'published' AND (c.title ILIKE $1 OR c.description ILIKE $1 OR s.name ILIKE $1)
+        WHERE c.status = 'published' AND c.education_level_id = $2 AND c.grade_id IS NOT DISTINCT FROM $3::uuid AND c.program_id IS NOT DISTINCT FROM $4::uuid AND (c.title ILIKE $1 OR c.description ILIKE $1 OR s.name ILIKE $1)
 		UNION ALL
-		SELECT 'lesson' AS result_type, l.id, l.title, left(l.content::text, 500), s.name
+        SELECT 'lesson' AS result_type, l.id, l.title, left(l.content::text, 500), s.name
 		FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id JOIN subjects s ON s.id = c.subject_id
-		WHERE c.status = 'published' AND (l.title ILIKE $1 OR l.content::text ILIKE $1)
-		ORDER BY title LIMIT 50`, [pattern])
+        WHERE c.status = 'published' AND m.status = 'published' AND l.status = 'published' AND c.education_level_id = $2 AND c.grade_id IS NOT DISTINCT FROM $3::uuid AND c.program_id IS NOT DISTINCT FROM $4::uuid AND (l.title ILIKE $1 OR l.content::text ILIKE $1)
+        ORDER BY title LIMIT 50`, [pattern, profile.education_level_id, profile.grade_id, profile.program_id])
     response.json({ data: result.rows })
 }))
 router.get('/courses', asyncHandler(async (request, response) => {
@@ -120,8 +134,7 @@ router.get('/tests/:id', asyncHandler(async (request, response) => {
         GROUP BY t.id`, [request.params.id])
     response.json({ data: result.rows[0] || null })
 }))
-router.post('/courses/:id/enroll', asyncHandler(async (request, response) => { await pool.query('INSERT INTO enrollments (student_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [request.auth?.userId, request.params.id]); response.status(201).json({ message: 'Enrolled' }) }))
-router.post('/lessons/:id/progress', asyncHandler(async (request, response) => { const input = z.object({ completed: z.boolean(), secondsSpent: z.number().int().nonnegative().max(86400) }).parse(request.body); await pool.query(`INSERT INTO progress (student_id, course_id, lesson_id, completed_at, seconds_spent) SELECT $1, m.course_id, l.id, CASE WHEN $2 THEN now() ELSE NULL END, $3 FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = $4 ON CONFLICT (student_id, lesson_id) DO UPDATE SET completed_at = EXCLUDED.completed_at, seconds_spent = progress.seconds_spent + EXCLUDED.seconds_spent`, [request.auth?.userId, input.completed, input.secondsSpent, request.params.id]); response.json({ message: 'Progress saved' }) }))
-router.post('/subjects', requirePermission('subjects.manage'), asyncHandler(async (request, response) => { const input = z.object({ name: z.string().min(2).max(80), description: z.string().max(500).default('') }).parse(request.body); const result = await pool.query('INSERT INTO subjects (name, description, created_by) VALUES ($1, $2, $3) RETURNING id, name, description', [input.name, input.description, request.auth?.userId]); response.status(201).json({ data: result.rows[0] }) }))
+router.post('/courses/:id/enroll', asyncHandler(async (request, response) => { const courseId = String(request.params.id); if (!(await canStudentSeeCourse(courseId, request.auth!.userId))) throw new HttpError(404, 'Published course not found'); await pool.query('INSERT INTO enrollments (student_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [request.auth!.userId, courseId]); response.status(201).json({ message: 'Enrolled' }) }))
+router.post('/lessons/:id/progress', asyncHandler(async (request, response) => { const input = z.object({ completed: z.boolean(), secondsSpent: z.number().int().nonnegative().max(86400) }).parse(request.body); const result = await pool.query(`INSERT INTO progress (student_id, course_id, lesson_id, completed_at, seconds_spent) SELECT $1, c.id, l.id, CASE WHEN $2 THEN now() ELSE NULL END, $3 FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id JOIN students sp ON sp.user_id = $1 WHERE l.id = $4 AND l.status = 'published' AND m.status = 'published' AND c.status = 'published' AND c.education_level_id = sp.education_level_id AND c.grade_id IS NOT DISTINCT FROM sp.grade_id AND c.program_id IS NOT DISTINCT FROM sp.program_id ON CONFLICT (student_id, lesson_id) DO UPDATE SET completed_at = EXCLUDED.completed_at, seconds_spent = progress.seconds_spent + EXCLUDED.seconds_spent RETURNING lesson_id`, [request.auth!.userId, input.completed, input.secondsSpent, request.params.id]); if (!result.rows[0]) throw new HttpError(404, 'Published lesson not found'); response.json({ message: 'Progress saved' }) }))
 
 export default router

@@ -16,20 +16,47 @@ router.use((request, _response, next) => {
         .catch(next)
 })
 router.use((request, _response, next) => {
-    if (request.method === 'GET') return next()
-    pool.query(`SELECT 1 FROM teacher_permissions WHERE teacher_id = $1 AND permission = ANY($2::text[])`, [request.auth!.userId, ['content.create', 'content.edit', 'content.publish', 'assessment.manage', 'courses.create', 'courses.update', 'courses.publish', 'lessons.create', 'lessons.update', 'quizzes.create', 'quizzes.update', 'tests.create', 'tests.update', 'exams.create', 'exams.update', 'homework.create', 'homework.update', 'students.view', 'results.view']])
+    const permissions = permissionsForRequest(request)
+    if (!permissions.length) return next()
+    pool.query('SELECT 1 FROM teacher_permissions WHERE teacher_id = $1 AND permission = ANY($2::text[])', [request.auth!.userId, permissions])
         .then((result) => result.rows[0] ? next() : next(new HttpError(403, 'Teacher permission is required')))
         .catch(next)
 })
 
-function requireTeacherPermission(permission: string) {
+function permissionOptions(permission: string) {
     const aliases: Record<string, string[]> = {
         'content.create': ['content.create', 'courses.create', 'lessons.create', 'homework.create', 'quizzes.create', 'tests.create', 'exams.create'],
         'content.edit': ['content.edit', 'courses.update', 'lessons.update', 'homework.update', 'quizzes.update', 'tests.update', 'exams.update'],
         'content.publish': ['content.publish', 'courses.publish'],
+        'assessment.manage': ['assessment.manage', 'quizzes.create', 'quizzes.update', 'tests.create', 'tests.update', 'exams.create', 'exams.update'],
     }
+    return aliases[permission] || [permission]
+}
+
+function permissionsForRequest(request: Request) {
+    const { method, path } = request
+    if (method === 'GET') {
+        if (path === '/submissions') return [...permissionOptions('content.edit'), 'students.view']
+        if (path === '/results') return [...permissionOptions('assessment.manage'), 'results.view']
+        return []
+    }
+    if (method === 'POST') {
+        if (/^\/(quizzes|tests|exams)(\/[^/]+\/questions)?$/.test(path)) return permissionOptions('assessment.manage')
+        if (path === '/homework' || /^\/content\/(notes|examples|exercises)$/.test(path)) return permissionOptions('content.create')
+        if (/^\/courses(?:\/[^/]+\/modules)?$/.test(path) || /^\/modules\/[^/]+\/lessons$/.test(path)) return permissionOptions('content.create')
+        if (/^\/ai\/drafts\/[^/]+\/publish$/.test(path)) return permissionOptions('content.publish')
+    }
+    if (method === 'PATCH') {
+        if (/^\/content\/[^/]+\/[^/]+\/status$/.test(path)) return permissionOptions('content.publish')
+        if (/^\/courses\/[^/]+$/.test(path) && ['pending', 'published'].includes(String(request.body?.status))) return permissionOptions('content.publish')
+        if (/^\/courses\/[^/]+$/.test(path) || /^\/submissions\/[^/]+\/grade$/.test(path) || /^\/ai\/drafts\/[^/]+$/.test(path)) return permissionOptions('content.edit')
+    }
+    return []
+}
+
+function requireTeacherPermission(permission: string) {
     return (request: Request, _response: Response, next: NextFunction) => {
-        pool.query('SELECT 1 FROM teacher_permissions WHERE teacher_id = $1 AND permission = ANY($2::text[])', [request.auth!.userId, aliases[permission] || [permission]])
+        pool.query('SELECT 1 FROM teacher_permissions WHERE teacher_id = $1 AND permission = ANY($2::text[])', [request.auth!.userId, permissionOptions(permission)])
             .then((result) => result.rows[0] ? next() : next(new HttpError(403, 'Teacher permission is required')))
             .catch(next)
     }
@@ -90,12 +117,13 @@ router.post('/content/:type', requireTeacherPermission('content.create'), asyncH
 router.patch('/content/:type/:contentId/status', requireTeacherPermission('content.publish'), asyncHandler(async (request, response) => {
     const type = teacherContentType.parse(request.params.type)
     const contentId = id.parse(request.params.contentId)
-    const nextStatus = z.enum(['draft', 'pending', 'published', 'archived']).parse(request.body.status)
+    const requestedStatus = z.enum(['draft', 'pending', 'published', 'archived']).parse(request.body.status)
+    const nextStatus = requestedStatus === 'published' ? 'pending' : requestedStatus
     const table = { courses: 'courses', modules: 'modules', lessons: 'lessons', notes: 'lesson_notes', examples: 'lesson_examples', exercises: 'lesson_exercises', assignments: 'assignments', quizzes: 'quizzes', tests: 'tests', exams: 'exams' }[type]
     const ownershipSql = { courses: 'teacher_id = $3', modules: 'course_id IN (SELECT id FROM courses WHERE teacher_id = $3)', lessons: 'module_id IN (SELECT m.id FROM modules m JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $3)', notes: 'lesson_id IN (SELECT l.id FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $3)', examples: 'lesson_id IN (SELECT l.id FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $3)', exercises: 'lesson_id IN (SELECT l.id FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE c.teacher_id = $3)', assignments: 'teacher_id = $3', quizzes: 'course_id IN (SELECT id FROM courses WHERE teacher_id = $3)', tests: 'course_id IN (SELECT id FROM courses WHERE teacher_id = $3)', exams: 'course_id IN (SELECT id FROM courses WHERE teacher_id = $3)' }[type]
     const result = await pool.query(`UPDATE ${table} SET status = $1 WHERE id = $2 AND ${ownershipSql} RETURNING *`, [nextStatus, contentId, request.auth!.userId])
     if (!result.rows[0]) throw new HttpError(404, 'Owned content not found')
-    if (['quizzes', 'tests', 'exams'].includes(type)) await pool.query(`UPDATE ${table} SET published = $1 WHERE id = $2`, [nextStatus === 'published', contentId])
+    if (['quizzes', 'tests', 'exams'].includes(type)) await pool.query(`UPDATE ${table} SET published = false WHERE id = $1`, [contentId])
     response.json({ data: result.rows[0] })
 }))
 async function insertQuestion(table: 'questions' | 'test_questions' | 'exam_questions', answerTable: 'answers' | 'test_answers' | 'exam_answers', ownerColumn: 'quiz_id' | 'test_id' | 'exam_id', ownerId: string, input: z.infer<typeof questionInput>) {
@@ -116,7 +144,7 @@ router.get('/dashboard', asyncHandler(async (request, response) => {
 }))
 router.get('/courses', asyncHandler(async (request, response) => { const result = await pool.query('SELECT c.id, c.title, c.description, c.difficulty, c.status, c.subject_id, s.name AS subject, count(DISTINCT e.student_id)::int AS students FROM courses c JOIN subjects s ON s.id = c.subject_id LEFT JOIN enrollments e ON e.course_id = c.id WHERE c.teacher_id = $1 GROUP BY c.id, s.name ORDER BY c.updated_at DESC', [request.auth!.userId]); response.json({ data: result.rows }) }))
 router.post('/courses', requireTeacherPermission('content.create'), asyncHandler(async (request, response) => { const input = z.object({ title: z.string().min(2).max(160), description: z.string().max(2000).default(''), subjectId: id, difficulty: z.string().max(80).default('Beginner'), educationLevelId: id.nullable().optional(), gradeId: id.nullable().optional(), programId: id.nullable().optional() }).parse(request.body); const result = await pool.query('INSERT INTO courses (teacher_id, subject_id, title, description, difficulty, status, education_level_id, grade_id, program_id) VALUES ($1, $2, $3, $4, $5, \'draft\', $6, $7, $8) RETURNING id, title, status', [request.auth!.userId, input.subjectId, input.title, input.description, input.difficulty, input.educationLevelId || null, input.gradeId || null, input.programId || null]); response.status(201).json({ data: result.rows[0] }) }))
-router.patch('/courses/:courseId', asyncHandler(async (request, response) => { const courseId = await ownedCourse(String(request.params.courseId), request.auth!.userId); const input = z.object({ title: z.string().min(2).max(160).optional(), description: z.string().max(2000).optional(), difficulty: z.string().max(80).optional(), status: z.enum(['draft', 'pending', 'published', 'archived']).optional() }).parse(request.body); const result = await pool.query('UPDATE courses SET title = COALESCE($1, title), description = COALESCE($2, description), difficulty = COALESCE($3, difficulty), status = COALESCE($4, status), published_at = CASE WHEN $4 = \'published\' THEN now() ELSE published_at END WHERE id = $5 RETURNING id, title, description, difficulty, status', [input.title || null, input.description ?? null, input.difficulty || null, input.status || null, courseId]); response.json({ data: result.rows[0] }) }))
+router.patch('/courses/:courseId', asyncHandler(async (request, response) => { const courseId = await ownedCourse(String(request.params.courseId), request.auth!.userId); const input = z.object({ title: z.string().min(2).max(160).optional(), description: z.string().max(2000).optional(), difficulty: z.string().max(80).optional(), status: z.enum(['draft', 'pending', 'published', 'archived']).optional() }).parse(request.body); const nextStatus = input.status === 'published' ? 'pending' : input.status || null; const result = await pool.query('UPDATE courses SET title = COALESCE($1, title), description = COALESCE($2, description), difficulty = COALESCE($3, difficulty), status = COALESCE($4, status), published_at = CASE WHEN $4 = \'published\' THEN now() ELSE published_at END WHERE id = $5 RETURNING id, title, description, difficulty, status', [input.title || null, input.description ?? null, input.difficulty || null, nextStatus, courseId]); response.json({ data: result.rows[0] }) }))
 router.post('/courses/:courseId/modules', asyncHandler(async (request, response) => { const courseId = await ownedCourse(String(request.params.courseId), request.auth!.userId); const input = z.object({ title: z.string().min(1).max(160), position: z.number().int().nonnegative().optional() }).parse(request.body); const result = await pool.query('INSERT INTO modules (course_id, title, position) VALUES ($1, $2, COALESCE($3, (SELECT COALESCE(max(position), -1) + 1 FROM modules WHERE course_id = $1))) RETURNING id, title, position', [courseId, input.title, input.position ?? null]); response.status(201).json({ data: result.rows[0] }) }))
 router.post('/modules/:moduleId/lessons', asyncHandler(async (request, response) => { const module = await ownedModule(String(request.params.moduleId), request.auth!.userId); const input = z.object({ title: z.string().min(1).max(160), content: z.unknown().default({}), durationMinutes: z.number().int().positive().default(1), position: z.number().int().nonnegative().optional() }).parse(request.body); const result = await pool.query('INSERT INTO lessons (module_id, title, content, duration_minutes, position) VALUES ($1, $2, $3, $4, COALESCE($5, (SELECT COALESCE(max(position), -1) + 1 FROM lessons WHERE module_id = $1))) RETURNING id, title, duration_minutes, position', [module.id, input.title, JSON.stringify(input.content), input.durationMinutes, input.position ?? null]); response.status(201).json({ data: result.rows[0] }) }))
 router.post('/homework', asyncHandler(async (request, response) => { const input = z.object({ courseId: id, title: z.string().min(2).max(160), instructions: z.string().min(1).max(10000), dueAt: z.string().datetime(), totalMarks: z.number().int().positive().default(100), resources: z.array(z.unknown()).default([]) }).parse(request.body); await ownedCourse(input.courseId, request.auth!.userId); const result = await pool.query('INSERT INTO assignments (course_id, teacher_id, title, instructions, due_at, total_marks, resources) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, title, due_at, total_marks', [input.courseId, request.auth!.userId, input.title, input.instructions, input.dueAt, input.totalMarks, JSON.stringify(input.resources)]); response.status(201).json({ data: result.rows[0] }) }))

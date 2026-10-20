@@ -8,6 +8,7 @@ import uploadRoutes from './routes/uploads.js'
 import studentRoutes from './routes/student.js'
 import aiRoutes from './routes/ai.js'
 import teacherRoutes from './routes/teacher.js'
+import messageRoutes from './routes/messages.js'
 import { applySecurity } from './middleware/security.js'
 import { errorHandler, notFound } from './middleware/errors.js'
 import { env } from './config.js'
@@ -28,6 +29,7 @@ export function createApp() {
     app.use('/api/student', studentRoutes)
     app.use('/api/ai', aiRoutes)
     app.use('/api/teacher', teacherRoutes)
+    app.use('/api/messages', messageRoutes)
     app.use(notFound)
     app.use(errorHandler)
     return app

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Edusphere – Senior 2 Dashboard</title>
+<style>
+:root{--bg:#f2f7fd;--ink:#14213d;--mut:#64748b;--pri:#1565d8;--teal:#0fb09f;--line:#e3ebf5;--sh:0 2px 10px rgba(30,70,140,.08)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+.top{position:fixed;inset:0 0 auto 0;height:68px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:18px;padding:0 24px;z-index:20}
+.brand{display:flex;align-items:center;gap:8px;font-size:25px;font-weight:800;color:#1458c4;width:216px}
+.search{position:relative;flex:0 1 530px;margin-left:8px}
+.search input{width:100%;height:38px;border:1px solid #cfe0f5;border-radius:20px;padding:0 16px 0 40px;background:#f6faff;font:inherit;font-size:13px}
+.search:before{content:"🔍";position:absolute;left:14px;top:9px;font-size:14px;opacity:.6}
+.pop{position:absolute;right:0;top:46px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(20,50,100,.15);min-width:240px;display:none;z-index:30;overflow:hidden}
+.pop.show{display:block}
+.search .pop{left:0;width:100%;top:44px}
+.pop a,.pop button{display:block;width:100%;text-align:left;padding:10px 14px;font-size:13px;color:var(--ink);text-decoration:none}
+.pop a:hover,.pop button:hover{background:#eef4fc}
+.pop small{color:var(--mut);display:block}
+.sp{flex:1}
+.bell{position:relative;font-size:22px}
+.bell b{position:absolute;top:-6px;right:-8px;background:#e5394f;color:#fff;border-radius:9px;font-size:10px;min-width:17px;height:17px;display:grid;place-items:center}
+.user{position:relative}
+.user>button{display:flex;gap:10px;align-items:center;text-align:left}
+.av{width:38px;height:38px;border-radius:50%;background:#cfe3fb;display:grid;place-items:center;font-size:20px}
+.user small{display:block;color:var(--mut);font-size:12px}
+.menu{display:none;font-size:22px}
+.side{position:fixed;top:68px;bottom:0;left:0;width:228px;background:#fff;padding:16px 8px;display:flex;flex-direction:column;z-index:15;transition:transform .2s}
+.nav button{display:flex;align-items:center;gap:16px;width:100%;padding:12px 14px;border-radius:8px;font-size:14.5px;text-align:left;margin-bottom:5px;color:#2b3a55}
+.nav button:hover{background:#eef4fc}
+.nav button.on{background:#e3effd;border-left:3px solid var(--pri);font-weight:600;color:#12408a}
+.nav span{width:24px;text-align:center;font-size:19px}
+.moti{margin:auto 14px 0;background:#dbe9fb;border-radius:10px;padding:20px 16px;font-size:14px;font-weight:600;line-height:1.45;color:#12408a}
+.moti hr{border:0;height:2px;width:34px;background:var(--teal);margin-top:12px}
+.foot{padding:36px 14px 8px;font-weight:700;font-size:15px;color:#1b3b73}
+.foot small{display:block;font-weight:400;font-size:10.5px;color:var(--mut);margin-top:6px}
+.main{margin:68px 0 0 228px;padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) 316px;gap:16px}
+.ban{position:relative;height:150px;border-radius:12px;overflow:hidden;background:linear-gradient(#d9ecfb,#eaf5fd);padding:22px 28px}
+.ban svg{position:absolute;inset:0;width:100%;height:100%}
+.ban div{position:relative}
+.ban p{font-size:17px;font-weight:600}
+.ban h1{font-size:29px;margin:2px 0 14px}
+.ban small{font-size:14px;color:#33415c}
+.script{position:absolute!important;right:34px;top:14px;font:italic 20px/1.25 "Segoe Script","Brush Script MT",cursive;color:#173a73;text-align:left}
+.panel{background:#fff;border-radius:12px;padding:14px;margin-top:10px;box-shadow:var(--sh)}
+.sh{display:flex;gap:12px;align-items:center;margin:2px 0 12px}
+.sh i{width:36px;height:36px;border-radius:9px;background:var(--teal);color:#fff;display:grid;place-items:center;font-style:normal;font-size:18px}
+.sh h2{font-size:20px}.sh p{font-size:12.5px;color:var(--mut);margin-top:2px}
+.grid{display:grid;gap:10px}
+.g5{grid-template-columns:repeat(5,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.card{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fff;box-shadow:0 1px 6px rgba(30,70,140,.06)}
+.g5 .card:nth-child(n+11){grid-column:span 1}
+.hd{display:flex;gap:10px;align-items:center;min-height:42px;cursor:pointer}
+.ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-size:20px;flex:none;color:#fff}
+.hd b{font-size:12.5px;line-height:1.25}
+.pct{font-size:10.5px;margin:10px 0 4px;color:#334155}
+.bar{height:5px;border-radius:3px;background:#e3e9f2;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:3px;background:var(--teal)}
+.btn{display:block;width:100%;margin-top:10px;padding:8px 0;border-radius:6px;font-size:11px;font-weight:700;border:1.5px solid var(--pri)}
+.btn.fill{background:var(--pri);color:#fff}.btn.out{background:#fff;color:var(--pri)}
+.btn:hover{filter:brightness(.95)}
+.elec{background:#eef1fc;border-radius:12px;padding:12px;margin-top:10px}
+.elec h3{font-size:19px;display:flex;align-items:center;gap:10px}.elec h3 i{color:#6a4fe0;font-style:normal}
+.elec>p{font-size:11px;color:var(--mut);margin:2px 0 10px 34px}
+.side2{padding-top:0}
+.rp{background:#fff;border-radius:12px;padding:14px;box-shadow:var(--sh)}
+.rp h2{display:flex;justify-content:space-between;align-items:center;font-size:17px;margin-bottom:10px}
+.rp h2 a{font-size:11px;color:var(--pri);font-weight:500;text-decoration:none;cursor:pointer}
+.ring{display:flex;gap:16px;align-items:center;margin-bottom:12px}
+.donut{width:96px;height:96px;border-radius:50%;background:conic-gradient(var(--teal) 62%,#e3ebf5 0);display:grid;place-items:center;flex:none}
+.donut b{width:74px;height:74px;border-radius:50%;background:#fff;display:grid;place-items:center;font-size:21px}
+.ring p{font-size:12.5px;color:var(--mut)}.ring strong{display:block;color:var(--ink);font-size:14px;margin-bottom:6px}
+.st{border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:10px;display:flex;align-items:center;gap:12px;font-size:11.5px;color:var(--mut)}
+.st i{font-style:normal;font-size:24px}.st b{display:block;font-size:17px;color:var(--ink);margin-top:2px}
+.st em{margin-left:auto;text-align:right;font-style:normal;font-size:10px}.st em u{display:block;text-decoration:none;color:#14a05c;font-weight:700;font-size:12px}
+.ai{margin-top:14px;border-radius:12px;padding:18px;color:#fff;background:linear-gradient(120deg,#5a4fe0,#7a62f0 60%,#5a8cf5);position:relative;overflow:hidden}
+.ai h3{font-size:19px}.ai p{font-size:12px;margin:12px 0 14px;opacity:.95;max-width:200px}
+.ai button{background:#fff;color:#2c4ec8;font-weight:700;padding:9px 18px;border-radius:20px;font-size:12.5px}
+.ai span{position:absolute;right:12px;bottom:6px;font-size:58px}
+.qa{margin-top:14px}.qa h3{font-size:15px;margin-bottom:6px}
+.qa button{display:flex;width:100%;align-items:center;gap:12px;padding:11px 4px;border-top:1px solid var(--line);font-size:12.5px;text-align:left}
+.qa button:hover{background:#f3f8fe}.qa em{margin-left:auto;font-style:normal;color:var(--mut)}
+.keep{margin-top:14px;background:#e4f6ee;border:1px solid #c5e8d8;border-radius:8px;padding:14px;font-size:11px;display:flex;gap:10px;line-height:1.5}
+.keep b{font-size:12.5px;display:block}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#14305f;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50}
+.toast.show{opacity:1}
+@media(max-width:1300px){.main{grid-template-columns:1fr}.g5{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:900px){.side{transform:translateX(-100%)}.side.open{transform:none;box-shadow:0 0 40px rgba(0,0,0,.3)}.main{margin-left:0}.menu{display:block}.brand{width:auto}.g4{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:620px){.g5,.g4{grid-template-columns:1fr 1fr}.user div{display:none}.script{display:none}.ban h1{font-size:21px}.main{padding:10px}.top{padding:0 12px}}
+@media(max-width:420px){.g5,.g4{grid-template-columns:1fr}}
+</style></head><body>
+<header class="top">
+ <button class="menu" id="menu" aria-label="Menu">☰</button>
+ <div class="brand">🎓 Edusphere</div>
+ <div class="search"><input id="q" placeholder="Search subjects, notes, quizzes, or anything..." autocomplete="off"><div class="pop" id="res"></div></div>
+ <div class="sp"></div>
+ <div style="position:relative"><button class="bell" id="bell" aria-label="Notifications">🔔<b id="nc">3</b></button><div class="pop" id="notes"></div></div>
+ <div class="user"><button id="ub"><span class="av">🧑</span><div><b id="un">Student</b><small id="ur">Senior 2</small></div><span>⌄</span></button>
+  <div class="pop" id="um"><button data-n="/profile">My Profile</button><button data-n="/settings">Settings</button><button id="lo">Log out</button></div></div>
+</header>
+<aside class="side" id="side">
+ <nav class="nav" id="nav"></nav>
+ <div class="moti">🏔️<br>Small steps<br>every day make<br>big results!<hr></div>
+ <div class="foot">🎓 Edusphere<small>Learn &nbsp;•&nbsp; Grow &nbsp;•&nbsp; Build Your Future</small></div>
+</aside>
+<div class="main">
+ <div>
+  <section class="ban">
+   <svg viewBox="0 0 900 150" preserveAspectRatio="xMidYMax slice"><path d="M380 150 L520 40 L570 80 L640 20 L800 150Z" fill="#6f9fb8"/><path d="M520 40 L560 80 L500 100Z M640 20 L690 70 L640 80Z" fill="#e8f2f6"/><path d="M330 150 Q480 90 640 120 T900 110 V150Z" fill="#4f9d62"/><path d="M420 150 Q560 128 700 140 T900 135 V150Z" fill="#3a8fc4" opacity=".85"/><ellipse cx="760" cy="30" rx="70" ry="16" fill="#fff" opacity=".7"/></svg>
+   <div><p id="gr">Good afternoon,</p><h1>Welcome to Senior 2 Learning Space</h1><small><b style="font-weight:600">Rwanda</b> Lower Secondary Curriculum &nbsp;•&nbsp; 2026 – 2027</small></div>
+   <div class="script">Better<br>Learning<br>Brighter<br>Future</div>
+  </section>
+  <section class="panel"><div class="sh"><i>📋</i><div><h2>Core Subjects</h2><p>These are the main subjects for Senior 2.</p></div></div><div class="grid g5" id="core"></div></section>
+  <section class="elec"><h3><i>⭐</i>School Elective</h3><p>These are school-selected electives. Not all schools offer the same options.</p><div class="grid g4" id="elec"></div></section>
+ </div>
+ <aside class="side2">
+  <div class="rp"><h2>📊 Your Progress <a data-n="/progress">View Details →</a></h2>
+   <div class="ring"><div class="donut" id="dn"><b id="dp">62%</b></div><p><strong>Overall Completion</strong>8 of 18 subjects</p></div>
+   <div class="st"><i>🕒</i><div>Weekly Study Time<b>12h 30m</b></div><em><u>↑ 20%</u>vs last week</em></div>
+   <div class="st"><i>📝</i><div>Quizzes Completed<b>14 / 28</b></div><em><u>↑ 40%</u>vs last week</em></div>
+   <div class="st"><i>🔥</i><div>Study Streak<b>5 days</b></div><em style="font-size:11px;color:var(--mut)">Keep it up! 🔥</em></div>
+  </div>
+  <div class="ai"><h3>🤖 Ask AI Tutor</h3><p>Ask questions from your S2 subjects.</p><button data-n="/ai-tutor">Start Chat &nbsp;→</button><span>🤖</span></div>
+  <div class="rp qa" style="margin-top:14px"><h3>⚡ Quick Actions</h3>
+   <button data-n="/notes">📄 View All Notes<em>›</em></button><button data-n="/quizzes">📝 Take a Quiz<em>›</em></button><button data-n="/calendar">📅 View Calendar<em>›</em></button><button data-n="/exams/schedule">🗓️ Check Exam Schedule<em>›</em></button></div>
+  <div class="keep"><span style="font-size:24px">💡</span><div><b>Keep going!</b>You're doing great. Consistency today builds success tomorrow.</div></div>
+ </aside>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+/* ===== INTEGRATION LAYER — set window.EDUSPHERE_CONFIG before this script, or edit defaults ===== */
+const CFG=Object.assign({
+ getUser:()=>{try{return JSON.parse(localStorage.getItem('edusphere_user'))||{name:'Student',role:'Senior 2'}}catch(e){return{name:'Student',role:'Senior 2'}}},
+ route:(slug,action)=>`/subjects/${slug}/${action}`, // action: open | continue
+ navigate:u=>{location.hash=u;toast('Opening '+u)},
+ loadProgress:null,       // async () => ({mathematics:68,...,overall:62})
+ loadNotifications:null,  // async () => [{title,time}]
+ search:null,             // async (q) => [{label,sub,url}]
+ logout:()=>toast('Logged out (connect to your auth)')
+},window.EDUSPHERE_CONFIG||{});
+const NAV=[['🏠','Dashboard','/dashboard'],['📖','My Subjects','/subjects'],['📄','Notes','/notes'],['❓','Quizzes','/quizzes'],['📋','Tests','/tests'],['🎓','Exams','/exams'],['📊','Progress','/progress'],['🤖','AI Tutor','/ai-tutor'],['📅','Calendar','/calendar'],['⚙️','Settings','/settings']];
+const S=(n,p,c,e,b)=>({n,p,c,e,b,id:n.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/-$/,'')});
+const CORE=[S('Mathematics',68,'#1e6fe0','🧮','C'),S('English',52,'#8e44e0','📖','C'),S('Kinyarwanda',74,'#2e9e5b','🌿','C'),S('French',43,'#e53950','🇫🇷','O'),S('Kiswahili',37,'#f59e0b','💬','O'),
+S('Physics',60,'#2a5bd7','⚛️','C'),S('Chemistry',48,'#2a6be0','⚗️','O'),S('Biology & Health Sciences',72,'#35a853','🍃','C'),S('ICT',55,'#1e6fe0','🖥️','C'),S('History & Citizenship',41,'#4a3fc0','🏛️','O'),
+S('Geography & Environment',63,'#2e9e5b','🌍','C'),S('Entrepreneurship',44,'#f59e0b','💡','O'),S('Religion & Ethics',58,'#2a6be0','🙏','C'),S('Physical Education & Sports',70,'#1e6fe0','🏃','C')];
+const ELEC=[S('Music, Drama & Dance',52,'#5a4fe0','🎵','O'),S('Fine Arts & Crafts',38,'#8e44e0','🎨','O'),S('Home Sciences',46,'#4a6fe8','🏠','O'),S('Farming (Agriculture & Animal Husbandry)',29,'#35a853','🌱','O')];
+const ALL=[...CORE,...ELEC];
+const $=id=>document.getElementById(id);
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1800)}
+function card(s,el){
+ const d=document.createElement('div');d.className='card';
+ d.innerHTML=`<div class="hd" tabindex="0" role="link"><div class="ic" style="background:${s.c}">${s.e}</div><b>${s.n}</b></div><div class="pct">${s.p}%</div><div class="bar"><i style="width:${s.p}%"></i></div>
+ <button class="btn ${s.b==='C'?'fill':'out'}">${s.b==='C'?'Continue Course':'Open Course'}</button>`;
+ const act=()=>CFG.navigate(CFG.route(s.id,s.b==='C'?'continue':'open'));
+ d.querySelector('.hd').onclick=act;d.querySelector('.hd').onkeydown=e=>{if(e.key==='Enter')act()};d.querySelector('.btn').onclick=act;
+ d._s=s;el.appendChild(d)}
+CORE.forEach(s=>card(s,$('core')));ELEC.forEach(s=>card(s,$('elec')));
+NAV.forEach((n,i)=>{const b=document.createElement('button');b.innerHTML=`<span>${n[0]}</span>${n[1]}`;if(!i)b.className='on';
+ b.onclick=()=>{document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('on'));b.classList.add('on');$('side').classList.remove('open');CFG.navigate(n[2])};$('nav').appendChild(b)});
+document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>CFG.navigate(b.dataset.n));
+$('menu').onclick=()=>$('side').classList.toggle('open');
+const h=new Date().getHours();$('gr').textContent=(h<12?'Good morning':h<17?'Good afternoon':'Good evening')+',';
+const u=CFG.getUser();$('un').textContent=u.name;$('ur').textContent=u.role;
+const closeAll=k=>['res','notes','um'].forEach(p=>p!==k&&$(p).classList.remove('show'));
+$('ub').onclick=e=>{e.stopPropagation();closeAll('um');$('um').classList.toggle('show')};
+$('lo').onclick=CFG.logout;
+let NOTES=[{title:'New quiz available in Mathematics',time:'Today'},{title:'English assignment due tomorrow',time:'Today'},{title:'Physics notes updated',time:'Yesterday'}];
+function drawNotes(){$('nc').textContent=NOTES.length;$('nc').style.display=NOTES.length?'':'none';
+ $('notes').innerHTML=NOTES.length?NOTES.map(n=>`<a href="#"><b>${n.title}</b><small>${n.time}</small></a>`).join('')+'<button id="clr">Mark all as read</button>':'<a>No new notifications</a>';
+ const c=$('clr');if(c)c.onclick=e=>{e.stopPropagation();NOTES=[];drawNotes()}}
+drawNotes();
+$('bell').onclick=e=>{e.stopPropagation();closeAll('notes');$('notes').classList.toggle('show')};
+$('q').oninput=async e=>{const q=e.target.value.trim().toLowerCase(),r=$('res');
+ if(!q){r.classList.remove('show');return}
+ let items;
+ if(CFG.search)items=await CFG.search(q);
+ else{items=[];ALL.filter(s=>s.n.toLowerCase().includes(q)).forEach(s=>items.push({label:s.n,sub:'Subject',url:CFG.route(s.id,'open')},{label:s.n+' – Notes',sub:'Notes',url:CFG.route(s.id,'notes')},{label:s.n+' – Quizzes',sub:'Quizzes',url:CFG.route(s.id,'quizzes')}))}
+ r.innerHTML=items.length?items.slice(0,8).map((i,k)=>`<button data-k="${k}">${i.label}<small>${i.sub}</small></button>`).join(''):'<a>No results found</a>';
+ r.querySelectorAll('button').forEach(b=>b.onclick=()=>{CFG.navigate(items[b.dataset.k].url);r.classList.remove('show')});
+ closeAll('res');r.classList.add('show')};
+document.addEventListener('click',e=>{if(!e.target.closest('.search'))$('res').classList.remove('show');closeAll()});
+(async()=>{try{if(CFG.loadProgress){const p=await CFG.loadProgress();
+ document.querySelectorAll('.card').forEach(c=>{const v=p[c._s.id];if(v!=null){c.querySelector('.pct').textContent=v+'%';c.querySelector('.bar i').style.width=v+'%'}});
+ if(p.overall!=null){$('dp').textContent=p.overall+'%';$('dn').style.background=`conic-gradient(var(--teal) ${p.overall}%,#e3ebf5 0)`}}
+ if(CFG.loadNotifications){NOTES=await CFG.loadNotifications();drawNotes()}}catch(e){console.warn('Edusphere data load failed',e)}})();
+</script></body></html>

@@ -5,6 +5,22 @@ const pool = require("../db");
 
 const router = express.Router();
 
+function requireAuth(req, res, next) {
+  const header = req.headers.authorization || "";
+  if (!header.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+
+  try {
+    const claims = jwt.verify(header.slice(7), process.env.JWT_SECRET);
+    req.auth = { userId: claims.id || claims.sub };
+    if (!req.auth.userId) return res.status(401).json({ message: "Invalid session" });
+    next();
+  } catch {
+    res.status(401).json({ message: "Your session has expired" });
+  }
+}
+
 // REGISTER
 router.post("/register", async (req, res) => {
   try {
@@ -58,10 +74,13 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
+      return res.status(400).json({ success: false, message: "Email and password are required" });
+    }
 
     const result = await pool.query(
-      "SELECT * FROM users WHERE email = $1",
-      [email]
+      "SELECT * FROM users WHERE lower(email) = lower($1)",
+      [email.trim()]
     );
 
     if (result.rows.length === 0) {
@@ -72,6 +91,10 @@ router.post("/login", async (req, res) => {
     }
 
     const user = result.rows[0];
+
+    if (user.status && user.status !== "active") {
+      return res.status(403).json({ success: false, message: "This account is not active" });
+    }
 
     const passwordMatch = await bcrypt.compare(
       password,
@@ -118,5 +141,32 @@ router.post("/login", async (req, res) => {
     });
   }
 });
+
+router.get("/me", requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, name, email, role, status FROM users WHERE id = $1",
+      [req.auth.userId]
+    );
+    const user = result.rows[0];
+    if (!user || (user.status && user.status !== "active")) {
+      return res.status(401).json({ message: "Active session required" });
+    }
+
+    res.json({
+      data: {
+        id: user.id,
+        fullName: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error("CURRENT USER ERROR:", error);
+    res.status(500).json({ message: "User identity could not be verified" });
+  }
+});
+
+router.post("/logout", (_req, res) => res.sendStatus(204));
 
 module.exports = router;

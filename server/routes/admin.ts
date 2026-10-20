@@ -13,7 +13,17 @@ const status = z.enum(['draft', 'pending', 'approved', 'rejected', 'published', 
 const cmsType = z.enum(['levels', 'grades', 'programs', 'subjects', 'courses', 'modules', 'lessons', 'notes', 'examples', 'exercises', 'assignments', 'quizzes', 'tests', 'exams'])
 type CmsType = z.infer<typeof cmsType>
 
-router.use(requireAuth, requirePermission('system.manage'))
+const requireCurrentAdmin = asyncHandler(async (request, _response, next) => {
+    const result = await pool.query('SELECT role, status FROM users WHERE id = $1', [request.auth!.userId])
+    const user = result.rows[0]
+    if (!user || !['admin', 'super-admin'].includes(user.role) || user.status !== 'active') {
+        throw new HttpError(403, 'Active administrator access required')
+    }
+    request.auth!.role = user.role
+    next()
+})
+
+router.use(requireAuth, requireCurrentAdmin, requirePermission('system.manage'))
 
 async function audit(actorId: string, action: string, entityType: string, entityId: string | null, metadata: unknown = {}) {
     await pool.query('INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata) VALUES ($1, $2, $3, $4, $5)', [actorId, action, entityType, entityId, JSON.stringify(metadata)])
@@ -33,6 +43,101 @@ router.get('/overview', asyncHandler(async (_request, response) => {
             (SELECT count(*)::int FROM lessons WHERE status = 'published') AS published_lessons,
             (SELECT count(*)::int FROM audit_logs WHERE created_at >= now() - interval '30 days') AS recent_actions`)
     response.json({ data: result.rows[0] })
+}))
+
+router.get('/schools', asyncHandler(async (request, response) => {
+    const input = z.object({ search: z.string().trim().max(120).optional(), limit: z.coerce.number().int().min(1).max(200).default(100), offset: z.coerce.number().int().min(0).default(0) }).parse(request.query)
+    const pattern = input.search ? `%${input.search}%` : null
+    const [rows, count] = await Promise.all([
+        pool.query(`SELECT id, name, location, phone, email, status, created_at FROM admin_schools WHERE $1::text IS NULL OR name ILIKE $1 OR location ILIKE $1 OR email ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, [pattern, input.limit, input.offset]),
+        pool.query('SELECT count(*)::int AS total FROM admin_schools WHERE $1::text IS NULL OR name ILIKE $1 OR location ILIKE $1 OR email ILIKE $1', [pattern]),
+    ])
+    response.json({ data: rows.rows, meta: { total: count.rows[0].total, limit: input.limit, offset: input.offset } })
+}))
+
+router.post('/schools', asyncHandler(async (request, response) => {
+    const input = z.object({ name: z.string().trim().min(2).max(160), location: z.string().trim().max(240).default(''), phone: z.string().trim().max(40).default(''), email: z.string().trim().email().transform((value) => value.toLowerCase()), status: z.enum(['active', 'inactive', 'pending']).default('pending') }).parse(request.body)
+    const result = await pool.query('INSERT INTO admin_schools (name, location, phone, email, status, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, location, phone, email, status, created_at', [input.name, input.location, input.phone, input.email, input.status, request.auth!.userId])
+    await audit(request.auth!.userId, 'school.created', 'school', result.rows[0].id)
+    response.status(201).json({ data: result.rows[0] })
+}))
+
+router.patch('/schools/:id', asyncHandler(async (request, response) => {
+    const schoolId = id.parse(request.params.id)
+    const input = z.object({ name: z.string().trim().min(2).max(160).optional(), location: z.string().trim().max(240).optional(), phone: z.string().trim().max(40).optional(), email: z.string().trim().email().transform((value) => value.toLowerCase()).optional(), status: z.enum(['active', 'inactive', 'pending']).optional() }).parse(request.body)
+    if (!Object.keys(input).length) throw new HttpError(400, 'Provide at least one field to update')
+    const columns: Record<string, string> = { name: 'name', location: 'location', phone: 'phone', email: 'email', status: 'status' }
+    const assignments = Object.entries(input).map(([key], index) => `${columns[key]} = $${index + 1}`)
+    const result = await pool.query(`UPDATE admin_schools SET ${assignments.join(', ')} WHERE id = $${assignments.length + 1} RETURNING id, name, location, phone, email, status, created_at`, [...Object.values(input), schoolId])
+    if (!result.rows[0]) throw new HttpError(404, 'School not found')
+    await audit(request.auth!.userId, 'school.updated', 'school', schoolId)
+    response.json({ data: result.rows[0] })
+}))
+
+router.delete('/schools/:id', asyncHandler(async (request, response) => {
+    const schoolId = id.parse(request.params.id)
+    const result = await pool.query('DELETE FROM admin_schools WHERE id = $1 RETURNING id', [schoolId])
+    if (!result.rows[0]) throw new HttpError(404, 'School not found')
+    await audit(request.auth!.userId, 'school.deleted', 'school', schoolId)
+    response.status(204).send()
+}))
+
+router.get('/results', asyncHandler(async (_request, response) => {
+    const result = await pool.query(`
+        SELECT id, student, student_id, course, assessment, assessment_type, score, total, submitted_at
+        FROM (
+            SELECT qa.id, u.full_name AS student, qa.student_id, c.title AS course, q.title AS assessment, 'Quiz' AS assessment_type, qa.score::numeric AS score, 100::numeric AS total, qa.submitted_at
+            FROM quiz_attempts qa JOIN users u ON u.id = qa.student_id JOIN quizzes q ON q.id = qa.quiz_id JOIN courses c ON c.id = q.course_id
+            UNION ALL
+            SELECT ta.id, u.full_name, ta.student_id, c.title, t.title, 'Test', ta.score::numeric, 100::numeric, ta.submitted_at
+            FROM test_attempts ta JOIN users u ON u.id = ta.student_id JOIN tests t ON t.id = ta.test_id JOIN courses c ON c.id = t.course_id
+            UNION ALL
+            SELECT ea.id, u.full_name, ea.student_id, c.title, ex.title, 'Exam', ea.score::numeric, 100::numeric, ea.submitted_at
+            FROM exam_attempts ea JOIN users u ON u.id = ea.student_id JOIN exams ex ON ex.id = ea.exam_id JOIN courses c ON c.id = ex.course_id
+            WHERE ea.submitted_at IS NOT NULL
+            UNION ALL
+            SELECT sub.id, u.full_name, sub.student_id, c.title, a.title, 'Assignment', sub.score::numeric, a.total_marks::numeric, sub.submitted_at
+            FROM submissions sub JOIN users u ON u.id = sub.student_id JOIN assignments a ON a.id = sub.assignment_id JOIN courses c ON c.id = a.course_id
+            WHERE sub.score IS NOT NULL
+        ) AS results
+        ORDER BY submitted_at DESC LIMIT 500`)
+    response.json({ data: result.rows })
+}))
+
+router.get('/activities', asyncHandler(async (_request, response) => {
+    const result = await pool.query(`SELECT l.id, l.actor_id, u.full_name AS actor, l.action, l.entity_type, l.entity_id, l.metadata, l.created_at FROM audit_logs l LEFT JOIN users u ON u.id = l.actor_id ORDER BY l.created_at DESC LIMIT 100`)
+    response.json({ data: result.rows })
+}))
+
+router.get('/notifications', asyncHandler(async (request, response) => {
+    const result = await pool.query('SELECT id, title, body, read_at, created_at FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [request.auth!.userId])
+    response.json({ data: result.rows })
+}))
+
+router.patch('/notifications/read', asyncHandler(async (request, response) => {
+    const input = z.object({ ids: z.array(id).max(100).optional(), all: z.boolean().default(false) }).parse(request.body)
+    if (!input.all && !input.ids?.length) throw new HttpError(400, 'Provide notification ids or set all to true')
+    const result = input.all
+        ? await pool.query('UPDATE notifications SET read_at = now() WHERE user_id = $1 AND read_at IS NULL RETURNING id', [request.auth!.userId])
+        : await pool.query('UPDATE notifications SET read_at = now() WHERE user_id = $1 AND id = ANY($2::uuid[]) AND read_at IS NULL RETURNING id', [request.auth!.userId, input.ids])
+    response.json({ data: result.rows })
+}))
+
+router.get('/classes', asyncHandler(async (_request, response) => {
+    const result = await pool.query(`SELECT s.id, s.course_id, c.title AS title, s.teacher_id, u.full_name AS teacher, s.starts_at, s.ends_at, s.room FROM admin_class_schedule s JOIN courses c ON c.id = s.course_id JOIN users u ON u.id = s.teacher_id WHERE s.starts_at >= now() ORDER BY s.starts_at LIMIT 50`)
+    response.json({ data: result.rows })
+}))
+
+router.post('/classes', asyncHandler(async (request, response) => {
+    const input = z.object({ courseId: id, teacherId: id, startsAt: z.string().datetime(), endsAt: z.string().datetime(), room: z.string().trim().max(160).default('') }).parse(request.body)
+    if (Date.parse(input.endsAt) <= Date.parse(input.startsAt)) throw new HttpError(400, 'Class end time must be later than its start time')
+    const course = await pool.query('SELECT id FROM courses WHERE id = $1', [input.courseId])
+    if (!course.rows[0]) throw new HttpError(404, 'Course not found')
+    const teacher = await pool.query(`SELECT 1 FROM teachers t JOIN users u ON u.id = t.user_id WHERE t.user_id = $1 AND u.status = 'active'`, [input.teacherId])
+    if (!teacher.rows[0]) throw new HttpError(404, 'Active teacher not found')
+    const result = await pool.query('INSERT INTO admin_class_schedule (course_id, teacher_id, starts_at, ends_at, room, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, course_id, teacher_id, starts_at, ends_at, room', [input.courseId, input.teacherId, input.startsAt, input.endsAt, input.room, request.auth!.userId])
+    await audit(request.auth!.userId, 'class.scheduled', 'class', result.rows[0].id)
+    response.status(201).json({ data: result.rows[0] })
 }))
 
 router.get('/taxonomy', asyncHandler(async (_request, response) => {
@@ -63,14 +168,36 @@ router.get('/review', asyncHandler(async (_request, response) => {
 }))
 
 router.get('/users', asyncHandler(async (request, response) => {
-    const search = z.string().trim().max(120).optional().parse(request.query.search)
-    const result = await pool.query('SELECT id, email, full_name, role, status, created_at, last_login_at FROM users WHERE ($1::text IS NULL OR full_name ILIKE $2 OR email ILIKE $2) ORDER BY created_at DESC LIMIT 200', [search || null, search ? `%${search}%` : null])
-    response.json({ data: result.rows })
+    const input = z.object({
+        search: z.string().trim().max(120).optional(),
+        role: z.enum(['student', 'teacher', 'admin', 'super-admin']).optional(),
+        status: z.enum(['active', 'suspended', 'pending']).optional(),
+        limit: z.coerce.number().int().min(1).max(200).default(100),
+        offset: z.coerce.number().int().min(0).default(0),
+    }).parse(request.query)
+    const pattern = input.search ? `%${input.search}%` : null
+    const values = [pattern, input.role || null, input.status || null]
+    const [result, count] = await Promise.all([
+        pool.query(`SELECT id, email, full_name, role, status, created_at, last_login_at FROM users
+            WHERE ($1::text IS NULL OR full_name ILIKE $1 OR email ILIKE $1)
+              AND ($2::user_role IS NULL OR role = $2)
+              AND ($3::account_status IS NULL OR status = $3)
+            ORDER BY created_at DESC LIMIT $4 OFFSET $5`, [...values, input.limit, input.offset]),
+        pool.query(`SELECT count(*)::int AS total FROM users
+            WHERE ($1::text IS NULL OR full_name ILIKE $1 OR email ILIKE $1)
+              AND ($2::user_role IS NULL OR role = $2)
+              AND ($3::account_status IS NULL OR status = $3)`, values),
+    ])
+    response.json({ data: result.rows, meta: { total: count.rows[0].total, limit: input.limit, offset: input.offset } })
 }))
 
 router.patch('/users/:id/status', asyncHandler(async (request, response) => {
     const userId = id.parse(request.params.id)
     const nextStatus = z.enum(['active', 'suspended', 'pending']).parse(request.body.status)
+    if (userId === request.auth!.userId) throw new HttpError(400, 'You cannot change your own account status')
+    const target = await pool.query('SELECT role FROM users WHERE id = $1', [userId])
+    if (!target.rows[0]) throw new HttpError(404, 'User not found')
+    if (['admin', 'super-admin'].includes(target.rows[0].role)) throw new HttpError(403, 'Administrator account status cannot be changed here')
     const result = await pool.query('UPDATE users SET status = $1 WHERE id = $2 RETURNING id, email, full_name, role, status', [nextStatus, userId])
     if (!result.rows[0]) throw new HttpError(404, 'User not found')
     await audit(request.auth!.userId, 'user.status_changed', 'user', userId, { status: nextStatus })
@@ -154,22 +281,60 @@ const listQueries: Record<CmsType, string> = {
     grades: 'SELECT g.id, g.name, g.code, g.position, g.education_level_id, el.name AS education_level_name FROM grades g JOIN education_levels el ON el.id = g.education_level_id ORDER BY el.position, g.position, g.name',
     programs: 'SELECT id, name, description, department_id FROM programs ORDER BY name',
     subjects: 'SELECT id, name, description, education_level_id, grade_id, created_at FROM subjects ORDER BY name',
-    courses: `SELECT c.id, c.title, c.description, c.difficulty, c.status, c.subject_id, c.education_level_id, c.grade_id, c.program_id, s.name AS subject, u.full_name AS teacher, c.created_at, c.updated_at FROM courses c JOIN subjects s ON s.id = c.subject_id JOIN users u ON u.id = c.teacher_id ORDER BY c.updated_at DESC`,
-    modules: 'SELECT m.id, m.course_id, m.title, m.position, m.status, c.title AS course FROM modules m JOIN courses c ON c.id = m.course_id ORDER BY c.title, m.position',
-    lessons: 'SELECT l.id, l.module_id, l.title, l.content, l.duration_minutes, l.position, l.status, m.title AS module, c.id AS course_id, c.title AS course FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id ORDER BY c.title, m.position, l.position',
-    notes: 'SELECT n.id, n.lesson_id, n.title, n.body, n.status, l.title AS lesson FROM lesson_notes n JOIN lessons l ON l.id = n.lesson_id ORDER BY n.updated_at DESC',
-    examples: 'SELECT e.id, e.lesson_id, e.title, e.body, e.status, l.title AS lesson FROM lesson_examples e JOIN lessons l ON l.id = e.lesson_id ORDER BY e.updated_at DESC',
-    exercises: 'SELECT e.id, e.lesson_id, e.prompt, e.answer, e.status, l.title AS lesson FROM lesson_exercises e JOIN lessons l ON l.id = e.lesson_id ORDER BY e.updated_at DESC',
-    assignments: 'SELECT a.id, a.course_id, a.title, a.instructions, a.due_at, a.total_marks, a.status, c.title AS course FROM assignments a JOIN courses c ON c.id = a.course_id ORDER BY a.due_at',
-    quizzes: 'SELECT q.id, q.course_id, q.lesson_id, q.title, q.time_limit_seconds, q.status, c.title AS course FROM quizzes q JOIN courses c ON c.id = q.course_id ORDER BY q.title',
-    tests: 'SELECT t.id, t.course_id, t.title, t.instructions, t.time_limit_seconds, t.status, c.title AS course FROM tests t JOIN courses c ON c.id = t.course_id ORDER BY t.title',
-    exams: 'SELECT e.id, e.course_id, e.title, e.time_limit_seconds, e.status, c.title AS course FROM exams e JOIN courses c ON c.id = e.course_id ORDER BY e.title',
+    courses: `SELECT c.id, c.title, c.description, c.difficulty, c.status, c.teacher_id, c.subject_id, c.education_level_id, c.grade_id, c.program_id, s.name AS subject, u.full_name AS teacher, c.created_at, c.updated_at FROM courses c JOIN subjects s ON s.id = c.subject_id JOIN users u ON u.id = c.teacher_id ORDER BY c.updated_at DESC`,
+    modules: 'SELECT m.id, m.course_id, m.title, m.position, m.status, c.title AS course, c.education_level_id, c.grade_id, c.program_id, c.subject_id FROM modules m JOIN courses c ON c.id = m.course_id ORDER BY c.title, m.position',
+    lessons: 'SELECT l.id, l.module_id, l.title, l.content, l.duration_minutes, l.position, l.status, m.title AS module, c.id AS course_id, c.title AS course, c.education_level_id, c.grade_id, c.program_id, c.subject_id FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id ORDER BY c.title, m.position, l.position',
+    notes: 'SELECT n.id, n.lesson_id, n.title, n.body, n.status, l.title AS lesson, c.title AS course, c.education_level_id, c.grade_id, c.program_id, c.subject_id FROM lesson_notes n JOIN lessons l ON l.id = n.lesson_id JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id ORDER BY n.updated_at DESC',
+    examples: 'SELECT e.id, e.lesson_id, e.title, e.body, e.status, l.title AS lesson, c.title AS course, c.education_level_id, c.grade_id, c.program_id, c.subject_id FROM lesson_examples e JOIN lessons l ON l.id = e.lesson_id JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id ORDER BY e.updated_at DESC',
+    exercises: 'SELECT e.id, e.lesson_id, e.prompt, e.answer, e.status, l.title AS lesson, c.title AS course, c.education_level_id, c.grade_id, c.program_id, c.subject_id FROM lesson_exercises e JOIN lessons l ON l.id = e.lesson_id JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id ORDER BY e.updated_at DESC',
+    assignments: 'SELECT a.id, a.course_id, a.title, a.instructions, a.due_at, a.total_marks, a.status, c.title AS course, c.education_level_id, c.grade_id, c.program_id, c.subject_id FROM assignments a JOIN courses c ON c.id = a.course_id ORDER BY a.due_at',
+    quizzes: 'SELECT q.id, q.course_id, q.lesson_id, q.title, q.time_limit_seconds, q.status, c.title AS course, c.education_level_id, c.grade_id, c.program_id, c.subject_id FROM quizzes q JOIN courses c ON c.id = q.course_id ORDER BY q.title',
+    tests: 'SELECT t.id, t.course_id, t.title, t.instructions, t.time_limit_seconds, t.status, c.title AS course, c.education_level_id, c.grade_id, c.program_id, c.subject_id FROM tests t JOIN courses c ON c.id = t.course_id ORDER BY t.title',
+    exams: 'SELECT e.id, e.course_id, e.title, e.time_limit_seconds, e.status, c.title AS course, c.education_level_id, c.grade_id, c.program_id, c.subject_id FROM exams e JOIN courses c ON c.id = e.course_id ORDER BY e.title',
 }
 
 router.get('/content/:type', asyncHandler(async (request, response) => {
     const type = cmsType.parse(request.params.type)
-    const result = await pool.query(listQueries[type])
-    response.json({ data: result.rows })
+    const input = z.object({
+        search: z.string().trim().max(120).optional(),
+        level: z.string().uuid().optional(),
+        grade: z.string().uuid().optional(),
+        program: z.union([z.string().uuid(), z.literal('none')]).optional(),
+        subject: z.string().uuid().optional(),
+        limit: z.coerce.number().int().min(1).max(200).default(100),
+        offset: z.coerce.number().int().min(0).default(0),
+    }).parse(request.query)
+    const searchableColumns: Record<CmsType, string[]> = {
+        levels: ['name', 'code'], grades: ['name', 'code', 'education_level_name'], programs: ['name', 'description'],
+        subjects: ['name', 'description'], courses: ['title', 'description', 'subject', 'teacher'], modules: ['title', 'course'],
+        lessons: ['title', 'course', 'module'], notes: ['title', 'body', 'lesson', 'course'], examples: ['title', 'body', 'lesson', 'course'],
+        exercises: ['prompt', 'answer', 'lesson', 'course'], assignments: ['title', 'instructions', 'course'], quizzes: ['title', 'course'],
+        tests: ['title', 'instructions', 'course'], exams: ['title', 'course'],
+    }
+    const scopedTypes: CmsType[] = ['courses', 'modules', 'lessons', 'notes', 'examples', 'exercises', 'assignments', 'quizzes', 'tests', 'exams']
+    const clauses: string[] = []
+    const values: unknown[] = []
+    if (input.search) {
+        values.push(`%${input.search}%`)
+        const parameter = `$${values.length}`
+        clauses.push(`(${searchableColumns[type].map((column) => `COALESCE(content.${column}::text, '') ILIKE ${parameter}`).join(' OR ')})`)
+    }
+    const supportsLevel = ['grades', 'subjects', ...scopedTypes].includes(type)
+    const supportsGrade = ['subjects', ...scopedTypes].includes(type)
+    if (supportsLevel && input.level) { values.push(input.level); clauses.push(`content.education_level_id = $${values.length}::uuid`) }
+    if (supportsGrade && input.grade) { values.push(input.grade); clauses.push(`content.grade_id = $${values.length}::uuid`) }
+    if (scopedTypes.includes(type) && input.program) {
+        values.push(input.program === 'none' ? null : input.program)
+        clauses.push(`content.program_id IS NOT DISTINCT FROM $${values.length}::uuid`)
+    }
+    if (scopedTypes.includes(type) && input.subject) { values.push(input.subject); clauses.push(`content.subject_id = $${values.length}::uuid`) }
+    const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''
+    const base = `FROM (${listQueries[type]}) AS content${where}`
+    const [result, count] = await Promise.all([
+        pool.query(`SELECT * ${base} LIMIT $${values.length + 1} OFFSET $${values.length + 2}`, [...values, input.limit, input.offset]),
+        pool.query(`SELECT count(*)::int AS total ${base}`, values),
+    ])
+    response.json({ data: result.rows, meta: { total: count.rows[0].total, limit: input.limit, offset: input.offset } })
 }))
 
 router.post('/content/:type', asyncHandler(async (request, response) => {

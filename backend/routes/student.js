@@ -58,7 +58,7 @@ router.get("/me/learning-dashboard", async (req, res) => {
         const profile = profileResult.rows[0] || null;
         if (!profile) return res.status(404).json({ message: "User account not found" });
 
-        const [curriculum, subjects, courses, notes, exercises, quizzes, progress] = await Promise.all([
+        const [curriculum, subjects, courses, notes, exercises, quizzes, progress, homework] = await Promise.all([
             pool.query(`
                 SELECT cs.id, cs.code, cs.name, cs.description, cs.source_reference,
                              cv.version_label, cv.effective_from, csrc.authority, csrc.title AS source_title, csrc.url AS source_url
@@ -72,7 +72,7 @@ router.get("/me/learning-dashboard", async (req, res) => {
             pool.query(`
                 SELECT DISTINCT s.id, s.name, s.description
                 FROM library_subjects s
-                WHERE s.education_level_id = $1 AND s.grade_id = $2 AND s.program_id IS NULL
+                WHERE s.education_level_id = $1 AND s.grade_id IS NOT DISTINCT FROM $2::bigint AND s.program_id IS NOT DISTINCT FROM $3::bigint
                 ORDER BY s.name`, [profile.education_level_id, profile.grade_id, profile.program_id]),
             pool.query(`
                 SELECT c.id, c.title, c.description, c.difficulty, c.status,
@@ -82,9 +82,9 @@ router.get("/me/learning-dashboard", async (req, res) => {
                 FROM library_courses c
                 JOIN library_subjects s ON s.id = c.subject_id
                 LEFT JOIN users u ON u.id = c.teacher_id
-                LEFT JOIN course_modules m ON m.course_id = c.id
-                LEFT JOIN course_lessons l ON l.module_id = m.id
-                WHERE c.status = 'published' AND c.education_level_id = $1 AND c.grade_id = $2 AND c.program_id IS NULL
+                LEFT JOIN course_modules m ON m.course_id = c.id AND m.status = 'published'
+                LEFT JOIN course_lessons l ON l.module_id = m.id AND l.status = 'published'
+                WHERE c.status = 'published' AND c.education_level_id = $1 AND c.grade_id IS NOT DISTINCT FROM $2::bigint AND c.program_id IS NOT DISTINCT FROM $3::bigint
                 GROUP BY c.id, s.name, u.name
                 ORDER BY c.updated_at DESC, c.title`, [profile.education_level_id, profile.grade_id, profile.program_id]),
             pool.query(`
@@ -93,7 +93,7 @@ router.get("/me/learning-dashboard", async (req, res) => {
                 JOIN course_lessons l ON l.id = n.lesson_id
                 JOIN course_modules m ON m.id = l.module_id
                 JOIN library_courses c ON c.id = m.course_id
-                WHERE c.status = 'published' AND c.education_level_id = $1 AND c.grade_id = $2 AND c.program_id IS NULL
+                WHERE c.status = 'published' AND m.status = 'published' AND l.status = 'published' AND n.status = 'published' AND c.education_level_id = $1 AND c.grade_id IS NOT DISTINCT FROM $2::bigint AND c.program_id IS NOT DISTINCT FROM $3::bigint
                 ORDER BY n.position, n.id`, [profile.education_level_id, profile.grade_id, profile.program_id]),
             pool.query(`
                 SELECT x.id, x.prompt, x.answer, x.lesson_id, c.title AS course_title
@@ -101,26 +101,31 @@ router.get("/me/learning-dashboard", async (req, res) => {
                 JOIN course_lessons l ON l.id = x.lesson_id
                 JOIN course_modules m ON m.id = l.module_id
                 JOIN library_courses c ON c.id = m.course_id
-                WHERE c.status = 'published' AND c.education_level_id = $1 AND c.grade_id = $2 AND c.program_id IS NULL
+                WHERE c.status = 'published' AND m.status = 'published' AND l.status = 'published' AND x.status = 'published' AND c.education_level_id = $1 AND c.grade_id IS NOT DISTINCT FROM $2::bigint AND c.program_id IS NOT DISTINCT FROM $3::bigint
                 ORDER BY x.position, x.id`, [profile.education_level_id, profile.grade_id, profile.program_id]),
             pool.query(`
                 SELECT q.id, q.title, q.course_id, c.title AS course_title, q.lesson_id
                 FROM library_quizzes q
                 JOIN library_courses c ON c.id = q.course_id
-                WHERE c.status = 'published' AND c.education_level_id = $1 AND c.grade_id = $2 AND c.program_id IS NULL
+                WHERE c.status = 'published' AND q.status = 'published' AND q.published = true AND c.education_level_id = $1 AND c.grade_id IS NOT DISTINCT FROM $2::bigint AND c.program_id IS NOT DISTINCT FROM $3::bigint
                 ORDER BY q.id`, [profile.education_level_id, profile.grade_id, profile.program_id]),
             pool.query(`
                 SELECT e.course_id, c.title AS course_title, COUNT(DISTINCT l.id)::int AS total_lessons,
                              COUNT(lp.lesson_id) FILTER (WHERE lp.completed_at IS NOT NULL)::int AS completed_lessons
                 FROM library_enrollments e
                 JOIN library_courses c ON c.id = e.course_id
-                LEFT JOIN course_modules m ON m.course_id = c.id
-                LEFT JOIN course_lessons l ON l.module_id = m.id
+                LEFT JOIN course_modules m ON m.course_id = c.id AND m.status = 'published'
+                LEFT JOIN course_lessons l ON l.module_id = m.id AND l.status = 'published'
                 LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.student_id = e.student_id
-                WHERE e.student_id = $1
-                GROUP BY e.course_id, c.title`, [req.auth.userId]),
+                WHERE e.student_id = $1 AND c.status = 'published' AND c.education_level_id = $2 AND c.grade_id IS NOT DISTINCT FROM $3::bigint AND c.program_id IS NOT DISTINCT FROM $4::bigint
+                GROUP BY e.course_id, c.title`, [req.auth.userId, profile.education_level_id, profile.grade_id, profile.program_id]),
+            pool.query(`SELECT a.id, a.course_id, a.title, a.instructions, a.due_at, a.total_marks, 'pending' AS status
+                FROM library_assessments a JOIN library_courses c ON c.id = a.course_id
+                WHERE a.kind = 'homework' AND a.status = 'published' AND c.status = 'published'
+                    AND c.education_level_id = $1 AND c.grade_id IS NOT DISTINCT FROM $2::bigint AND c.program_id IS NOT DISTINCT FROM $3::bigint
+                ORDER BY a.due_at NULLS LAST, a.id`, [profile.education_level_id, profile.grade_id, profile.program_id]),
         ]);
-        res.json({ data: { profile, curriculum: curriculum.rows, subjects: subjects.rows, courses: courses.rows, notes: notes.rows, exercises: exercises.rows, quizzes: quizzes.rows, tests: [], exams: [], homework: [], results: [], progress: progress.rows } });
+        res.json({ data: { profile, curriculum: curriculum.rows, subjects: subjects.rows, courses: courses.rows, notes: notes.rows, exercises: exercises.rows, quizzes: quizzes.rows, tests: [], exams: [], homework: homework.rows, results: [], progress: progress.rows } });
     } catch (error) {
         console.error("LEARNING DASHBOARD ERROR:", error.message);
         res.status(500).json({ message: "Learning dashboard is temporarily unavailable." });

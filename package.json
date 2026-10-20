@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "dev:server": "tsx watch server/index.ts",
-    "dev:all": "concurrently -k \"npm run dev\" \"npm run dev:server\"",
+    "dev:all": "concurrently -k \"npm run dev\" \"npm run dev:legacy-server\"",
+    "dev:legacy-server": "npm --prefix backend start",
     "start:server": "node dist-server/index.js",
     "build": "tsc -b && vite build",
     "build:server": "tsc -p tsconfig.server.json",

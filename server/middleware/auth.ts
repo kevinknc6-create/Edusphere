@@ -23,6 +23,13 @@ export function requireAuth(request: Request, _response: Response, next: NextFun
     }
 }
 
+export function requireRole(...roles: AppRole[]) {
+    return (request: Request, _response: Response, next: NextFunction) => {
+        if (!request.auth || !roles.includes(request.auth.role)) return next(new HttpError(403, 'Insufficient permissions'))
+        return next()
+    }
+}
+
 export function requirePermission(permission: Permission) {
     return (request: Request, _response: Response, next: NextFunction) => {
         if (!request.auth) return next(new HttpError(403, 'Insufficient permissions'))

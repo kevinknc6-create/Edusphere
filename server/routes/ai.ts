@@ -21,6 +21,15 @@ type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
 async function buildContext(input: z.infer<typeof chatInput>, userId: string, role: string) {
     const context: string[] = []
+    let educationLevel = 'the learner\'s current education level'
+    if (role === 'student') {
+        const profile = await pool.query(`SELECT el.name AS education_level, g.name AS grade, p.name AS program FROM students sp LEFT JOIN education_levels el ON el.id = sp.education_level_id LEFT JOIN grades g ON g.id = sp.grade_id LEFT JOIN programs p ON p.id = sp.program_id WHERE sp.user_id = $1`, [userId])
+        const learner = profile.rows[0]
+        if (learner) {
+            educationLevel = learner.education_level || educationLevel
+            context.push(`Learner profile: education level ${learner.education_level || 'not set'}; class/grade ${learner.grade || 'not set'}; program ${learner.program || 'not set'}`)
+        }
+    }
     if (input.courseId) {
         const course = role === 'student'
             ? await pool.query(`SELECT c.title, c.description, s.name AS subject, c.difficulty FROM courses c JOIN subjects s ON s.id = c.subject_id JOIN students sp ON sp.user_id = $2 WHERE c.id = $1 AND c.status = 'published' AND c.education_level_id = sp.education_level_id AND c.grade_id IS NOT DISTINCT FROM sp.grade_id AND c.program_id IS NOT DISTINCT FROM sp.program_id`, [input.courseId, userId])
@@ -32,14 +41,14 @@ async function buildContext(input: z.infer<typeof chatInput>, userId: string, ro
     }
     if (input.lessonId) {
         const lesson = role === 'student'
-            ? await pool.query(`SELECT l.title, l.content, m.title AS module FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id JOIN students sp ON sp.user_id = $2 WHERE l.id = $1 AND l.status = 'published' AND m.status = 'published' AND c.status = 'published' AND c.education_level_id = sp.education_level_id AND c.grade_id IS NOT DISTINCT FROM sp.grade_id AND c.program_id IS NOT DISTINCT FROM sp.program_id`, [input.lessonId, userId])
+            ? await pool.query(`SELECT l.title, l.content, m.title AS module, c.title AS course, s.name AS subject FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id JOIN subjects s ON s.id = c.subject_id JOIN students sp ON sp.user_id = $2 WHERE l.id = $1 AND l.status = 'published' AND m.status = 'published' AND c.status = 'published' AND c.education_level_id = sp.education_level_id AND c.grade_id IS NOT DISTINCT FROM sp.grade_id AND c.program_id IS NOT DISTINCT FROM sp.program_id`, [input.lessonId, userId])
             : role === 'teacher'
-                ? await pool.query(`SELECT l.title, l.content, m.title AS module FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id WHERE l.id = $1 AND c.teacher_id = $2`, [input.lessonId, userId])
-                : await pool.query(`SELECT l.title, l.content, m.title AS module FROM lessons l JOIN modules m ON m.id = l.module_id WHERE l.id = $1`, [input.lessonId])
+                ? await pool.query(`SELECT l.title, l.content, m.title AS module, c.title AS course, s.name AS subject FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id JOIN subjects s ON s.id = c.subject_id WHERE l.id = $1 AND c.teacher_id = $2`, [input.lessonId, userId])
+                : await pool.query(`SELECT l.title, l.content, m.title AS module, c.title AS course, s.name AS subject FROM lessons l JOIN modules m ON m.id = l.module_id JOIN courses c ON c.id = m.course_id JOIN subjects s ON s.id = c.subject_id WHERE l.id = $1`, [input.lessonId])
         if (input.lessonId && !lesson.rows[0] && role === 'student') throw new HttpError(404, 'Published lesson context not found')
-        if (lesson.rows[0]) context.push(`Lesson: ${lesson.rows[0].title}; module: ${lesson.rows[0].module}; content: ${JSON.stringify(lesson.rows[0].content)}`)
+        if (lesson.rows[0]) context.push(`Published lesson context: course ${lesson.rows[0].course}; subject ${lesson.rows[0].subject}; module ${lesson.rows[0].module}; lesson ${lesson.rows[0].title}; lesson content: ${JSON.stringify(lesson.rows[0].content)}`)
     }
-    return context.join('\n')
+    return { context: context.join('\n'), educationLevel }
 }
 
 async function askProvider(messages: ChatMessage[]) {
@@ -62,7 +71,11 @@ router.use(requireAuth, aiRateLimit)
 router.post('/chat', asyncHandler(async (request, response) => {
     const input = chatInput.parse(request.body)
     const userId = request.auth!.userId
-    const context = await buildContext(input, request.auth!.userId, request.auth!.role)
+    if (request.auth!.role === 'teacher') {
+        const teacher = await pool.query(`SELECT 1 FROM users u JOIN teachers t ON t.user_id = u.id WHERE u.id = $1 AND u.status = 'active' AND t.teacher_verification_status = 'verified'`, [userId])
+        if (!teacher.rows[0]) throw new HttpError(403, 'Teacher verification is required')
+    }
+    const learnerContext = await buildContext(input, request.auth!.userId, request.auth!.role)
     let conversationId = input.conversationId
     if (conversationId) {
         const owned = await pool.query('SELECT id FROM ai_conversations WHERE id = $1 AND user_id = $2', [conversationId, userId])
@@ -72,8 +85,8 @@ router.post('/chat', asyncHandler(async (request, response) => {
         conversationId = created.rows[0].id as string
     }
     const history = await pool.query(`SELECT role, content FROM ai_messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 12`, [conversationId])
-    const level = input.educationLevel || 'the learner\'s current education level'
-    const system = `You are Edusphere AI, a patient learning assistant for ${level}. Explain clearly, check understanding, and adapt examples to the learner. Do not invent course facts. Reply in ${input.language}. ${context ? `Use this learning context:\n${context}` : ''}`
+    const level = request.auth!.role === 'student' ? learnerContext.educationLevel : input.educationLevel || learnerContext.educationLevel
+    const system = `You are Edusphere AI, a patient learning assistant for ${level}. Explain clearly, check understanding, and adapt examples to the learner. Do not invent course facts. When published lesson content is provided, prioritize that content and distinguish it from general knowledge. Reply in ${input.language}. ${learnerContext.context ? `Use this learning context:\n${learnerContext.context}` : ''}`
     const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history.rows.reverse().map((item) => ({ role: item.role as 'user' | 'assistant', content: item.content as string })), { role: 'user', content: input.message }]
     const answer = await askProvider(messages)
     await pool.query('INSERT INTO ai_messages (conversation_id, role, content) VALUES ($1, $2, $3), ($1, $4, $5)', [conversationId, 'user', input.message, 'assistant', answer])
@@ -82,7 +95,9 @@ router.post('/chat', asyncHandler(async (request, response) => {
 }))
 
 router.post('/generate', asyncHandler(async (request, response) => {
-    if (!['teacher', 'admin', 'super-admin'].includes(request.auth!.role)) throw new HttpError(403, 'Teacher access required')
+    if (request.auth!.role !== 'teacher') throw new HttpError(403, 'Teacher access required')
+    const teacher = await pool.query(`SELECT 1 FROM users u JOIN teachers t ON t.user_id = u.id JOIN teacher_permissions tp ON tp.teacher_id = u.id WHERE u.id = $1 AND u.status = 'active' AND t.teacher_verification_status = 'verified' AND tp.permission IN ('content.create', 'courses.create', 'lessons.create', 'homework.create', 'quizzes.create', 'tests.create', 'exams.create')`, [request.auth!.userId])
+    if (!teacher.rows[0]) throw new HttpError(403, 'Verified teacher content permission is required')
     const input = z.object({ kind: z.enum(['lesson-notes', 'quiz', 'assignment', 'exam', 'answer-key', 'lesson-plan', 'revision-material']), topic: z.string().trim().min(2).max(500), educationLevel: z.string().trim().max(120).optional(), instructions: z.string().trim().max(2000).optional(), language: z.string().trim().max(40).default('English') }).parse(request.body)
     const answer = await askProvider([
         { role: 'system', content: `You create editable ${input.kind} drafts for teachers. Return structured Markdown with headings and clear answer keys where relevant. Never claim the draft is published. Use ${input.language} and adapt it to ${input.educationLevel || 'the requested learner level'}.` },

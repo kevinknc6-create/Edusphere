@@ -19,7 +19,7 @@ Set strong values for `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` in `.env`.
 
 ## Database setup
 
-Create the database and user, then run the migration:
+For a new database using the TypeScript server schema, create the database and user, then run its migrations:
 
 ```sql
 CREATE USER edusphere WITH PASSWORD 'change-me';
@@ -28,20 +28,33 @@ CREATE DATABASE edusphere OWNER edusphere;
 
 ```bash
 psql "$env:DATABASE_URL" -f server/db/migrations/001_initial.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/002_learning_ai.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/003_student_education_profiles.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/004_assessment_experience.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/005_admin_content_cms.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/006_teacher_verification.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/012_password_reset_codes.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/013_super_admin.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/014_admin_dashboard.sql
 ```
 
-The migration creates users, roles, courses, modules, lessons, quizzes, assignments, exams, progress, certificates, notifications, achievements, notes, bookmarks, refresh sessions, and audit logs.
+These migrations belong only to the TypeScript server schema. Never run them against the existing legacy `edusphere_db`.
+
+The TypeScript migrations above are for a separate TypeScript-server database. The dashboard started by `npm run dev:all` uses the legacy API and its database; apply legacy migrations from `backend/migrations/` to that database instead. Never run the TypeScript migrations against the legacy `edusphere_db`.
 
 ## Running
 
 ```bash
-npm run dev
-npm run dev:server
+npm run dev:all
 ```
 
 - Frontend: `http://localhost:5173`
-- API: `http://localhost:5000`
+- Legacy API (for the existing `edusphere_db` schema): `http://localhost:5000`
 - Health check: `http://localhost:5000/health`
+
+`npm run dev:all` runs Vite and the legacy API for the existing `edusphere_db`. Keep `backend/.env` configured for that database. The separate TypeScript API can still be run with `npm run dev:server`, but it expects the TypeScript server schema.
+
+The standalone admin dashboard requires `backend/migrations/012_admin_account.sql`, `backend/migrations/013_admin_cms.sql`, and `backend/migrations/014_admin_dashboard.sql` to be applied to the legacy database. The `server/db/migrations/014_admin_dashboard.sql` migration is only for the TypeScript server database and must not be run against `edusphere_db`.
 
 ## Production builds
 
@@ -56,6 +69,7 @@ npm run build
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `GET /api/auth/me`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
 - `POST /api/auth/verify-email`
@@ -85,11 +99,31 @@ npm run build
 ### Administration
 
 - `GET /api/admin/overview`
+- `GET /api/admin/taxonomy`
+- `GET /api/admin/review`
+- `GET /api/admin/teachers`
+- `POST /api/admin/teachers`
+- `PATCH /api/admin/teachers/:id/status`
+- `PUT /api/admin/teachers/:id/permissions`
+- `GET /api/admin/content/:type`
+- `POST /api/admin/content/:type`
+- `PATCH /api/admin/content/:type/:contentId`
+- `PATCH /api/admin/content/:type/:contentId/status`
+- `DELETE /api/admin/content/:type/:contentId`
 - `GET /api/admin/users`
 - `PATCH /api/admin/users/:id/status`
-- `GET /api/admin/moderation`
-- `PATCH /api/admin/moderation/courses/:id`
 - `GET /api/admin/audit-logs` (Super Admin only)
+- `GET|POST /api/admin/schools`
+- `PATCH|DELETE /api/admin/schools/:id`
+- `GET /api/admin/results`
+- `GET /api/admin/activities`
+- `GET /api/admin/notifications`
+- `PATCH /api/admin/notifications/read`
+- `GET|POST /api/admin/classes`
+- `GET /api/messages`
+- `POST /api/messages`
+- `POST /api/messages/:conversationId/messages`
+- `PATCH /api/messages/:conversationId/read`
 
 Uploads are limited to JPEG, PNG, WebP, PDF, and MP4 files with a 10 MB limit at `POST /api/uploads`.
 
@@ -149,10 +183,16 @@ CREATE DATABASE edusphere OWNER edusphere;
 ```bash
 psql "$env:DATABASE_URL" -f server/db/migrations/001_initial.sql
 psql "$env:DATABASE_URL" -f server/db/migrations/002_learning_ai.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/003_student_education_profiles.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/004_assessment_experience.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/005_admin_content_cms.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/006_teacher_verification.sql
 psql "$env:DATABASE_URL" -f server/db/migrations/012_password_reset_codes.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/013_super_admin.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/014_admin_dashboard.sql
 ```
 
-The migrations preserve the existing schema and add the education taxonomy, optional course taxonomy links, private AI conversations/messages, and teacher-generated draft content. Apply `002_learning_ai.sql` only after the existing initial schema is present.
+The `npm run dev:server` and `npm run start:server` scripts use the TypeScript API and migrations under `server/`. Apply only migrations that are missing from the target database, in order; `002_learning_ai.sql` depends on the initial schema. The `backend/` directory contains a separate legacy CommonJS API and schema—do not mix its migrations with the active server database.
 
 ## Running
 
@@ -162,16 +202,16 @@ npm run dev:server
 ```
 
 - Frontend: `http://localhost:5173`
-- API: `http://localhost:5000`
-- Health check: `http://localhost:5000/health`
+- API: `http://localhost:5001`
+- Health check: `http://localhost:5001/health`
 
-## Course library
+## Legacy course-library backend
 
-The active legacy backend uses the additive migration at `backend/migrations/003_course_library.sql`. It creates education levels, grades, university faculties/departments/programs, subjects, courses, modules, structured lessons, notes, examples, exercises, quizzes, enrollments, progress, bookmarks, and recently viewed lessons without modifying existing users.
+The separate CommonJS backend can use the additive migration at `backend/migrations/003_course_library.sql`. It creates education levels, grades, university faculties/departments/programs, subjects, courses, modules, structured lessons, notes, examples, exercises, quizzes, enrollments, progress, bookmarks, and recently viewed lessons without modifying existing users. These tables and APIs are distinct from the `server/` TypeScript API and must not be mixed with its migrations.
 
 Teacher AI review state is stored by the additive migration `backend/migrations/004_teacher_drafts.sql`; generated drafts remain editable and unpublished until a teacher explicitly publishes them.
 
-Apply it once from the repository root when deploying the active backend:
+Apply it only when deploying the legacy `backend/server.js` service:
 
 ```powershell
 Get-Content backend/migrations/003_course_library.sql | psql "$env:DATABASE_URL"
@@ -262,11 +302,31 @@ AI requests require the optional server-side `AI_API_KEY`. When it is absent or 
 ### Administration
 
 - `GET /api/admin/overview`
+- `GET /api/admin/taxonomy`
+- `GET /api/admin/review`
+- `GET /api/admin/teachers`
+- `POST /api/admin/teachers`
+- `PATCH /api/admin/teachers/:id/status`
+- `PUT /api/admin/teachers/:id/permissions`
+- `GET /api/admin/content/:type`
+- `POST /api/admin/content/:type`
+- `PATCH /api/admin/content/:type/:contentId`
+- `PATCH /api/admin/content/:type/:contentId/status`
+- `DELETE /api/admin/content/:type/:contentId`
 - `GET /api/admin/users`
 - `PATCH /api/admin/users/:id/status`
-- `GET /api/admin/moderation`
-- `PATCH /api/admin/moderation/courses/:id`
 - `GET /api/admin/audit-logs` (Super Admin only)
+- `GET|POST /api/admin/schools`
+- `PATCH|DELETE /api/admin/schools/:id`
+- `GET /api/admin/results`
+- `GET /api/admin/activities`
+- `GET /api/admin/notifications`
+- `PATCH /api/admin/notifications/read`
+- `GET|POST /api/admin/classes`
+- `GET /api/messages`
+- `POST /api/messages`
+- `POST /api/messages/:conversationId/messages`
+- `PATCH /api/messages/:conversationId/read`
 
 Uploads are limited to JPEG, PNG, WebP, PDF, and MP4 files with a 10 MB limit at `POST /api/uploads`.
 

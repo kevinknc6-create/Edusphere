@@ -15,6 +15,6 @@ export const errorHandler: ErrorRequestHandler = (error, request, response, _nex
 function isDatabaseConnectionError(error: unknown): boolean {
     if (!error) return false
     const candidate = error as { name?: string; code?: string; message?: string; errors?: unknown[] }
-    const connectionCodes = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT'])
-    return candidate.name === 'AggregateError' || Boolean(candidate.code && connectionCodes.has(candidate.code)) || Boolean(candidate.message?.includes('ECONNREFUSED')) || Boolean(candidate.errors?.some((nestedError) => isDatabaseConnectionError(nestedError)))
+    const connectionCodes = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', '3D000', '28P01', '57P03'])
+    return candidate.name === 'AggregateError' || Boolean(candidate.code && (connectionCodes.has(candidate.code) || candidate.code.startsWith('08'))) || Boolean(candidate.message?.includes('ECONNREFUSED')) || Boolean(candidate.errors?.some((nestedError) => isDatabaseConnectionError(nestedError)))
 }
