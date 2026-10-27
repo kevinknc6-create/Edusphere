@@ -45,6 +45,31 @@ router.get('/overview', asyncHandler(async (_request, response) => {
     response.json({ data: result.rows[0] })
 }))
 
+router.get('/class-dashboards', asyncHandler(async (_request, response) => {
+    const result = await pool.query(`
+        SELECT u.full_name, u.email, d.class_code, d.data, d.updated_at
+        FROM class_dashboard_state d
+        JOIN users u ON u.id = d.user_id
+        ORDER BY d.updated_at DESC
+        LIMIT 500`)
+    const data = result.rows.map(({ data: state, ...student }) => {
+        const taskGroups = state?.tasks && typeof state.tasks === 'object' && !Array.isArray(state.tasks) ? Object.values(state.tasks) : []
+        const tasks = taskGroups.flatMap((group) => Array.isArray(group) ? group : [])
+        const scoreGroups = state?.scores && typeof state.scores === 'object' && !Array.isArray(state.scores) ? Object.values(state.scores) : []
+        const scores = scoreGroups.flatMap((subject) => subject && typeof subject === 'object' && !Array.isArray(subject)
+            ? Object.values(subject).filter((score): score is number => typeof score === 'number' && Number.isFinite(score))
+            : [])
+        return {
+            ...student,
+            tasks_completed: tasks.filter((task) => task && typeof task === 'object' && (task.d === 1 || task.d === true)).length,
+            tasks_total: tasks.length,
+            quizzes_taken: scores.length,
+            average_score: scores.length ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length) : null,
+        }
+    })
+    response.json({ data })
+}))
+
 router.get('/schools', asyncHandler(async (request, response) => {
     const input = z.object({ search: z.string().trim().max(120).optional(), limit: z.coerce.number().int().min(1).max(200).default(100), offset: z.coerce.number().int().min(0).default(0) }).parse(request.query)
     const pattern = input.search ? `%${input.search}%` : null

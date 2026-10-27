@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#030807">
+  <title>Sign in · EduSphere</title>
+  <meta name="description" content="Sign in or create your EduSphere account.">
+  <link rel="preload" as="image" href="assets/tree-water-bg.jpg" media="(min-width: 721px)">
+  <link rel="preload" as="image" href="assets/tree-water-bg-mobile.jpg" media="(max-width: 720px)">
+  <link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg__image"></div>
+    <canvas class="bg__canvas" id="tree-canvas"></canvas>
+    <div class="bg__overlay"></div>
+    <div class="bg__glow"></div>
+  </div>
+
+  <main class="page">
+    <section class="brand" aria-labelledby="brand-title">
+      <a class="logo" href="/" aria-label="EduSphere home">
+        <svg class="logo__mark" viewBox="0 0 48 48" width="44" height="44" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#34f5a5"/>
+              <stop offset="1" stop-color="#19d3da"/>
+            </linearGradient>
+          </defs>
+          <circle cx="24" cy="24" r="20" fill="none" stroke="url(#lg)" stroke-width="2.5"/>
+          <ellipse cx="24" cy="24" rx="9" ry="20" fill="none" stroke="url(#lg)" stroke-width="1.8" opacity=".75"/>
+          <path d="M4.5 24h39M8 14.5h32M8 33.5h32" stroke="url(#lg)" stroke-width="1.6" opacity=".6" fill="none"/>
+          <circle cx="24" cy="24" r="3.4" fill="url(#lg)"/>
+        </svg>
+        <span class="logo__word">Edu<b>Sphere</b></span>
+      </a>
+      <h1 id="brand-title" class="brand__title" data-copy="title">Welcome back.<br><span>Keep growing.</span></h1>
+      <p class="brand__text" data-copy="text">Sign in to continue your courses, track your progress, and learn at your own pace.</p>
+    </section>
+
+    <section class="card" data-mode="signin" aria-labelledby="card-title">
+      <!-- Mode switch -->
+      <div class="tabs" role="tablist" aria-label="Account">
+        <span class="tabs__thumb" aria-hidden="true"></span>
+        <button type="button" role="tab" id="tab-signin" class="tabs__tab" aria-selected="true" aria-controls="login-form" data-switch="signin">Sign in</button>
+        <button type="button" role="tab" id="tab-signup" class="tabs__tab" aria-selected="false" aria-controls="signup-form" data-switch="signup" tabindex="-1">Create account</button>
+      </div>
+
+      <header class="card__head">
+        <h2 id="card-title">Sign in</h2>
+        <p id="card-sub">Enter your details to access your account.</p>
+      </header>
+
+      <div id="form-alert" class="alert" role="alert" aria-live="assertive" hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 8v5m0 3.5h.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+        <span id="form-alert-text"></span>
+      </div>
+
+      <!-- Social sign-in (sign in + create account) -->
+      <div id="social" class="social">
+        <button type="button" id="google-btn" class="btn-google">
+          <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true" focusable="false">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.87.92 7.53 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          </svg>
+          <span class="btn-google__label">Continue with Google</span>
+          <span class="btn-google__spinner" aria-hidden="true"></span>
+        </button>
+        <div class="divider" role="separator"><span>or use email</span></div>
+      </div>
+
+      <!-- SIGN IN -->
+      <form id="login-form" class="panel" data-panel="signin" role="tabpanel" aria-labelledby="tab-signin" novalidate autocomplete="on">
+        <div class="field">
+          <label for="identifier">Email address</label>
+          <div class="control">
+            <svg class="control__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm0 .5 8 6 8-6"/></svg>
+            <input id="identifier" name="email" type="email" inputmode="email" autocomplete="username"
+                   autocapitalize="none" autocorrect="off" spellcheck="false"
+                   placeholder="you@school.edu" required aria-describedby="identifier-error">
+          </div>
+          <p class="field__error" id="identifier-error" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="control">
+            <svg class="control__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 10V8a6 6 0 0 1 12 0v2m-12 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Zm6 4v2"/></svg>
+            <input id="password" name="password" type="password" autocomplete="current-password"
+                   placeholder="Enter your password" required aria-describedby="password-error password-caps">
+            <button type="button" class="toggle" data-target="password" aria-label="Show password" aria-pressed="false" aria-controls="password">
+              <svg class="eye eye--show" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>
+              <svg class="eye eye--hide" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.4 4.5-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+            </button>
+          </div>
+          <p class="field__hint" id="password-caps" hidden>Caps Lock is on</p>
+          <p class="field__error" id="password-error" hidden></p>
+        </div>
+
+        <div class="row">
+          <label class="check" for="remember">
+            <input id="remember" name="remember" type="checkbox">
+            <span class="check__box" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m3 8.5 3.2 3L13 4.5"/></svg></span>
+            <span>Remember me</span>
+          </label>
+          <button type="button" class="link" data-switch="reset">Forgot password?</button>
+        </div>
+
+        <button class="btn" type="submit" data-submit>
+          <span class="btn__label">Sign in</span>
+          <span class="btn__spinner" aria-hidden="true"></span>
+          <svg class="btn__check" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+        </button>
+      </form>
+
+      <!-- CREATE ACCOUNT -->
+      <form id="signup-form" class="panel" data-panel="signup" role="tabpanel" aria-labelledby="tab-signup" novalidate autocomplete="on" hidden>
+        <div class="field">
+          <label for="su-name">Full name</label>
+          <div class="control">
+            <svg class="control__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0"/></svg>
+            <input id="su-name" name="name" type="text" autocomplete="name" placeholder="Ada Lovelace" required aria-describedby="su-name-error">
+          </div>
+          <p class="field__error" id="su-name-error" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="su-email">Email address</label>
+          <div class="control">
+            <svg class="control__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm0 .5 8 6 8-6"/></svg>
+            <input id="su-email" name="email" type="email" inputmode="email" autocomplete="email"
+                   autocapitalize="none" autocorrect="off" spellcheck="false"
+                   placeholder="you@school.edu" required aria-describedby="su-email-error">
+          </div>
+          <p class="field__error" id="su-email-error" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="su-password">Password</label>
+          <div class="control">
+            <svg class="control__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 10V8a6 6 0 0 1 12 0v2m-12 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Zm6 4v2"/></svg>
+            <input id="su-password" name="password" type="password" autocomplete="new-password"
+                   placeholder="At least 8 characters" required aria-describedby="su-password-help su-password-caps su-password-error">
+            <button type="button" class="toggle" data-target="su-password" aria-label="Show password" aria-pressed="false" aria-controls="su-password">
+              <svg class="eye eye--show" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>
+              <svg class="eye eye--hide" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.4 4.5-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+            </button>
+          </div>
+          <div class="meter" id="su-password-help" data-level="0">
+            <div class="meter__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <span class="meter__text" id="meter-text" aria-live="polite">Use 8+ characters with a letter and a number.</span>
+          </div>
+          <p class="field__hint" id="su-password-caps" hidden>Caps Lock is on</p>
+          <p class="field__error" id="su-password-error" hidden></p>
+        </div>
+
+
+        <div class="field">
+          <label for="su-confirm">Confirm password</label>
+          <div class="control">
+            <svg class="control__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 10V8a6 6 0 0 1 12 0v2m-12 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Zm4 5 1.6 1.6L14.5 13"/></svg>
+            <input id="su-confirm" name="confirmPassword" type="password" autocomplete="new-password"
+                   placeholder="Repeat your password" required aria-describedby="su-confirm-error">
+            <button type="button" class="toggle" data-target="su-confirm" aria-label="Show password" aria-pressed="false" aria-controls="su-confirm">
+              <svg class="eye eye--show" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>
+              <svg class="eye eye--hide" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.4 4.5-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+            </button>
+          </div>
+          <p class="field__error" id="su-confirm-error" hidden></p>
+        </div>
+
+        <div class="field field--check">
+          <label class="check" for="su-terms">
+            <input id="su-terms" name="terms" type="checkbox" required aria-describedby="su-terms-error">
+            <span class="check__box" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m3 8.5 3.2 3L13 4.5"/></svg></span>
+            <span>I agree to the <a class="link" id="terms-link" href="terms.html" target="_blank" rel="noopener">Terms</a> and <a class="link" id="privacy-link" href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a></span>
+          </label>
+          <p class="field__error" id="su-terms-error" hidden></p>
+        </div>
+
+        <button class="btn" type="submit" data-submit>
+          <span class="btn__label">Create account</span>
+          <span class="btn__spinner" aria-hidden="true"></span>
+          <svg class="btn__check" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+        </button>
+        <p class="card__foot">Already have an account? <button type="button" class="link" data-switch="signin">Sign in</button></p>
+      </form>
+
+      <!-- RESET PASSWORD -->
+      <form id="reset-form" class="panel" data-panel="reset" novalidate hidden>
+        <div class="field">
+          <label for="rs-email">Email address</label>
+          <div class="control">
+            <svg class="control__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm0 .5 8 6 8-6"/></svg>
+            <input id="rs-email" name="email" type="email" inputmode="email" autocomplete="email"
+                   autocapitalize="none" autocorrect="off" spellcheck="false"
+                   placeholder="you@school.edu" required aria-describedby="rs-email-error">
+          </div>
+          <p class="field__error" id="rs-email-error" hidden></p>
+        </div>
+
+        <button class="btn" type="submit" data-submit>
+          <span class="btn__label">Send reset link</span>
+          <span class="btn__spinner" aria-hidden="true"></span>
+          <svg class="btn__check" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+        </button>
+        <p class="card__foot"><button type="button" class="link" data-switch="signin">← Back to sign in</button></p>
+      </form>
+
+
+      <!-- CHOOSE NEW PASSWORD (from the emailed link) -->
+      <form id="newpass-form" class="panel" data-panel="newpass" novalidate hidden>
+        <div class="field">
+          <label for="np-password">New password</label>
+          <div class="control">
+            <svg class="control__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 10V8a6 6 0 0 1 12 0v2m-12 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Zm6 4v2"/></svg>
+            <input id="np-password" name="password" type="password" autocomplete="new-password" placeholder="At least 8 characters" required aria-describedby="np-meter np-password-error">
+            <button type="button" class="toggle" data-target="np-password" aria-label="Show password" aria-pressed="false" aria-controls="np-password">
+              <svg class="eye eye--show" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>
+              <svg class="eye eye--hide" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.4 4.5-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+            </button>
+          </div>
+          <div class="meter" id="np-meter" data-level="0">
+            <div class="meter__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <span class="meter__text" aria-live="polite">Use 8+ characters with a letter and a number.</span>
+          </div>
+          <p class="field__error" id="np-password-error" hidden></p>
+        </div>
+        <div class="field">
+          <label for="np-confirm">Confirm new password</label>
+          <div class="control">
+            <svg class="control__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 10V8a6 6 0 0 1 12 0v2m-12 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Zm4 5 1.6 1.6L14.5 13"/></svg>
+            <input id="np-confirm" name="confirmPassword" type="password" autocomplete="new-password" placeholder="Repeat your password" required aria-describedby="np-confirm-error">
+          </div>
+          <p class="field__error" id="np-confirm-error" hidden></p>
+        </div>
+        <button class="btn" type="submit" data-submit>
+          <span class="btn__label">Save new password</span>
+          <span class="btn__spinner" aria-hidden="true"></span>
+          <svg class="btn__check" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+        </button>
+        <p class="card__foot"><button type="button" class="link" data-switch="signin">← Back to sign in</button></p>
+      </form>
+
+      <p id="status" class="sr-only" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <script type="module" src="js/login.js"></script>
+</body>
+</html>

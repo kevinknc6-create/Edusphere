@@ -28,6 +28,50 @@ function positiveInteger(value, fieldName, nullable = false) {
 
 router.use(requireAuth);
 
+function classCode(value) { return ["S1", "S2", "S3"].includes(value) ? value : null; }
+async function requireMatchingClass(req, res, code) {
+    if (req.auth.role !== "student") { res.status(403).json({ message: "Student access required" }); return false; }
+    const result = await pool.query("SELECT g.code FROM users u JOIN grades g ON g.id = u.grade_id WHERE u.id = $1", [req.auth.userId]);
+    if (!result.rows[0] || !new RegExp(`(?:^|_)${code.slice(1)}$`, "i").test(result.rows[0].code)) {
+        res.status(403).json({ message: "This dashboard does not match your registered class" });
+        return false;
+    }
+    return true;
+}
+
+router.get("/me/class-dashboard", async (req, res) => {
+    const code = classCode(req.query.classCode);
+    if (!code) return res.status(400).json({ message: "A supported class code is required" });
+    try {
+        if (!(await requireMatchingClass(req, res, code))) return;
+        const result = await pool.query("SELECT class_code, data, updated_at FROM class_dashboard_state WHERE user_id = $1", [req.auth.userId]);
+        const saved = result.rows[0];
+        if (saved && saved.class_code !== code) return res.status(403).json({ message: "This dashboard does not match your registered class" });
+        return res.json({ data: saved || null });
+    } catch (error) {
+        console.error("CLASS DASHBOARD READ ERROR:", error);
+        return res.status(500).json({ message: "Class dashboard could not be loaded" });
+    }
+});
+
+router.put("/me/class-dashboard", async (req, res) => {
+    const code = classCode(req.body && req.body.classCode);
+    const data = req.body && req.body.data;
+    if (!code || !data || typeof data !== "object" || Array.isArray(data)) return res.status(400).json({ message: "Valid class dashboard data is required" });
+    if (JSON.stringify(data).length > 500000) return res.status(413).json({ message: "Class dashboard data is too large" });
+    try {
+        if (!(await requireMatchingClass(req, res, code))) return;
+        const result = await pool.query(`INSERT INTO class_dashboard_state (user_id, class_code, data, updated_at)
+            VALUES ($1, $2, $3::jsonb, now())
+            ON CONFLICT (user_id) DO UPDATE SET class_code = EXCLUDED.class_code, data = EXCLUDED.data, updated_at = now()
+            RETURNING class_code, data, updated_at`, [req.auth.userId, code, JSON.stringify(data)]);
+        return res.json({ data: result.rows[0] });
+    } catch (error) {
+        console.error("CLASS DASHBOARD SAVE ERROR:", error);
+        return res.status(500).json({ message: "Class dashboard could not be saved" });
+    }
+});
+
 router.get("/me/education-profile", async (req, res) => {
     try {
         const result = await pool.query(`

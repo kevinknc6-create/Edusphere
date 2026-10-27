@@ -65,6 +65,7 @@
       video = $('.esl-video'), fallback = $('.esl-fallback'), panel = $('.esl-panel'),
       hint = $('.esl-hint'), skip = $('.esl-skip'), inner = $('.esl-inner');
 
+    const autoIntro = root.hasAttribute('data-auto-intro');
     const reduceMQ = matchMedia('(prefers-reduced-motion: reduce)');
     const cleanups = [];
     const on = (t, e, f, o) => { t.addEventListener(e, f, o); cleanups.push(() => t.removeEventListener(e, f, o)); };
@@ -75,7 +76,12 @@
     let lastSeek = -1, pendingSeek = null, unlocking = false;
     let isLive = false, lastPos = '', currentSrc = '';
     let lockY = 0, unlocked = false;   // pins the panel open while typing, until the user scrolls away on purpose
+    let introComplete = reduceMQ.matches;
     let staticMode = reduceMQ.matches;
+    function completeIntro() {
+      introComplete = true;
+      render(cur);
+    }
 
     // ---------------------------------------------------------- video source
     function pickSource() {
@@ -109,6 +115,13 @@
     on(video, 'loadeddata', () => {
       ready = true;
       lastSeek = -1;
+      if (autoIntro) {
+        if (introComplete) return;
+        video.play().catch(() => {
+          completeIntro();
+        });
+        return;
+      }
       // iOS/Safari only paint seeked frames once playback has been "unlocked" — do it silently, muted.
       unlocking = true;
       const p = video.play();
@@ -118,11 +131,21 @@
     on(video, 'seeked', () => {
       if (pendingSeek !== null) { const t = pendingSeek; pendingSeek = null; video.currentTime = t; }
     });
-    on(video, 'play', () => { if (!unlocking) video.pause(); });      // cannot be played like a normal video
+    on(video, 'ended', () => {
+      if (autoIntro) completeIntro();
+    });
+    on(video, 'timeupdate', () => {
+      if (autoIntro && video.duration && video.currentTime >= video.duration - 0.05) completeIntro();
+    });
+    on(video, 'play', () => { if (!autoIntro && !unlocking) video.pause(); });
     on(video, 'error', () => {
       failed = true;                                                  // degrade to a poster cross-fade
       fallback.hidden = false;
       fallback.src = root.dataset.posterEnd || '';
+      if (autoIntro) {
+        fallback.style.opacity = '1';
+        completeIntro();
+      }
       schedule();
     });
 
@@ -131,7 +154,9 @@
       W = stage.clientWidth; H = stage.clientHeight;
       sheet = W < 640 || W < H;
       root.dataset.layout = sheet ? 'sheet' : 'panel';
-      if (sheet) {
+      if (autoIntro) {
+        media.style.top = media.style.bottom = media.style.height = '';
+      } else if (sheet) {
         // Fit ~44% of the scene's width on screen (logo, walker and bag all readable),
         // in a band at the top; the sheet rises over the rest.
         dw = W * 2.28; dh = dw * VH / VW;
@@ -168,6 +193,21 @@
     }
 
     function render(p) {
+      if (autoIntro) {
+        panel.style.opacity = introComplete ? '1' : '0';
+        panel.style.visibility = introComplete ? 'visible' : 'hidden';
+        panel.style.transform = 'translate(-50%, -50%)';
+        inner.style.opacity = introComplete ? '1' : '0';
+        panel.inert = !introComplete;
+        panel.setAttribute('aria-hidden', introComplete ? 'false' : 'true');
+        panel.classList.toggle('is-live', introComplete);
+        isLive = introComplete;
+        hint.style.opacity = '0';
+        skip.style.opacity = introComplete ? '0' : '1';
+        skip.style.visibility = introComplete ? 'hidden' : 'visible';
+        return;
+      }
+
       const t = timeAt(p);
       seek(t);
 
@@ -261,12 +301,18 @@
     on(panel, 'focusout', schedule);
     on(reduceMQ, 'change', () => {
       staticMode = reduceMQ.matches;
+      if (autoIntro && staticMode) introComplete = true;
       root.classList.toggle('is-static', staticMode);
       measure(); lastSeek = -1; schedule();
     });
     on(document, 'visibilitychange', () => { if (!document.hidden) { lastSeek = -1; schedule(); } });
 
     on(skip, 'click', () => {
+      if (autoIntro) {
+        video.pause();
+        completeIntro();
+        return;
+      }
       const top = track.getBoundingClientRect().top + window.scrollY;
       window.scrollTo({ top: top + scrollable, behavior: reduceMQ.matches ? 'auto' : 'smooth' });
     });
@@ -277,7 +323,7 @@
 
     // ----------------------------------------------------------------- boot
     root.classList.toggle('is-static', staticMode);
-    if (root.dataset.poster) video.poster = root.dataset.poster;
+    if (root.dataset.poster) video.poster = introComplete && root.dataset.posterEnd ? root.dataset.posterEnd : root.dataset.poster;
     measure();
     lastW = stage.clientWidth; lastH = stage.clientHeight;
     if (staticMode) cur = target = 1;

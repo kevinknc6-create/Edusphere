@@ -2,6 +2,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import crypto from 'node:crypto'
 import authRoutes from './routes/auth.js'
+import googleAuthRoutes from './routes/google.js'
 import adminRoutes from './routes/admin.js'
 import learningRoutes from './routes/learning.js'
 import uploadRoutes from './routes/uploads.js'
@@ -23,6 +24,7 @@ export function createApp() {
     app.use(cookieParser())
     app.get('/health', (_request, response) => response.json({ status: 'ok', service: 'edusphere-api' }))
     app.use('/api/auth', authRoutes)
+    app.use('/api/auth/google', googleAuthRoutes)
     app.use('/api/learning', learningRoutes)
     app.use('/api/admin', adminRoutes)
     app.use('/api/uploads', uploadRoutes)

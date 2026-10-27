@@ -26,6 +26,11 @@ type Question = { id: number; type: 'multiple-choice' | 'true-false' | 'fill-bla
 type AssessmentResult = { mode: AssessmentMode; score: number; correct: number; total: number; completedAt: string; answers: Record<number, string> }
 type Course = { id: string | number; title: string; category: string; teacher: string; lessons: number; progress: number; difficulty: string; color: string; icon: string; description: string }
 type TeacherCourse = { id: number; title: string; subject: string; students: number; lessons: number; published: boolean; progress: number; color: string }
+function classDashboardPath(profile: EducationProfile | null) {
+    if (!profile || !/secondary|senior/i.test(profile.education_level_name || '')) return null
+    const grade = profile.grade_name?.match(/(?:senior|secondary|s)?\s*([1-3])\s*$/i)?.[1]
+    return grade ? `/classe/s${grade}.html` : null
+}
 const courses: Course[] = []
 const subjects = ['All subjects']
 const educationLevels = ['Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6', 'Secondary 1', 'Secondary 2', 'Secondary 3', 'Secondary 4', 'Secondary 5', 'Secondary 6', 'L3', 'L4', 'L5', 'Computer Science', 'Software Engineering', 'Information Technology', 'Networking', 'Cybersecurity', 'Artificial Intelligence', 'Data Science', 'Business', 'Economics', 'Accounting', 'Finance', 'Law', 'Education', 'Engineering', 'Medicine', 'Nursing', 'Agriculture', 'Architecture', 'Mathematics', 'Physics', 'Chemistry', 'Biology']
@@ -104,6 +109,11 @@ function App() {
             setEducationProfile(result.data)
         }).catch(() => setEducationProfile(null))
     }, [isAuthenticated, currentUser?.id, currentUser?.role])
+    useEffect(() => {
+        if (!isAuthenticated || currentUser?.role !== 'student') return
+        const path = classDashboardPath(educationProfile)
+        if (path && window.location.pathname !== path) window.location.replace(path)
+    }, [isAuthenticated, currentUser?.role, educationProfile])
     useEffect(() => {
         if (!isAuthenticated || currentUser?.role !== 'student') return
         api.learningSummary().then((result) => setLearningSummary(result.data)).catch(() => setLearningSummary(null))

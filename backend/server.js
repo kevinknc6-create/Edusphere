@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
 const pool = require("./db");
@@ -15,6 +16,7 @@ app.get("/health", (_req, res) => res.json({ status: "ok", service: "edusphere-l
 
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/learning", learningRoutes);

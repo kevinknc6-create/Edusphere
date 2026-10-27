@@ -133,7 +133,35 @@ router.get("/overview", async (req, res) => {
             (SELECT count(*)::int FROM course_lessons WHERE status = 'published') AS published_lessons,
             (SELECT count(*)::int FROM library_courses WHERE status = 'draft') AS draft_courses,
             (SELECT count(*)::int FROM admin_audit_logs WHERE created_at >= now() - interval '30 days') AS recent_actions`);
-        res.json({ data: result.rows[0] });
+        res.json({ data: result.rows[0]         });
+
+        router.get("/class-dashboards", async (req, res) => {
+            try {
+                const result = await pool.query(`SELECT u.name AS full_name, u.email, d.class_code, d.data, d.updated_at
+                    FROM class_dashboard_state d JOIN users u ON u.id = d.user_id
+                    ORDER BY d.updated_at DESC LIMIT 500`);
+                const data = result.rows.map(({ data: state, ...student }) => {
+                    const taskGroups = state && state.tasks && typeof state.tasks === "object" && !Array.isArray(state.tasks) ? Object.values(state.tasks) : [];
+                    const tasks = taskGroups.flatMap((group) => Array.isArray(group) ? group : []);
+                    const scoreGroups = state && state.scores && typeof state.scores === "object" && !Array.isArray(state.scores) ? Object.values(state.scores) : [];
+                    const scores = scoreGroups.flatMap((subject) =>
+                        subject && typeof subject === "object" && !Array.isArray(subject)
+                            ? Object.values(subject).filter((score) => typeof score === "number" && Number.isFinite(score))
+                            : []);
+                    return {
+                        ...student,
+                        tasks_completed: tasks.filter((task) => task && typeof task === "object" && (task.d === 1 || task.d === true)).length,
+                        tasks_total: tasks.length,
+                        quizzes_taken: scores.length,
+                        average_score: scores.length ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length) : null
+                    };
+                });
+                return res.json({ data });
+            } catch (error) {
+                console.error("CLASS DASHBOARD REPORT ERROR:", error);
+                return res.status(500).json({ message: "Class dashboard report could not be loaded" });
+            }
+        });
     } catch (error) { console.error("ADMIN OVERVIEW ERROR:", error.message); res.status(500).json({ message: "Admin overview is temporarily unavailable." }); }
 });
 

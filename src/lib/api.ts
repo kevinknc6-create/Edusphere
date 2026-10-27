@@ -127,6 +127,7 @@ export const api = {
     createDepartment: (input: Record<string, unknown>) => request<{ data: unknown }>('/learning/admin/departments', { method: 'POST', body: JSON.stringify(input) }),
     createProgram: (input: Record<string, unknown>) => request<{ data: unknown }>('/learning/admin/programs', { method: 'POST', body: JSON.stringify(input) }),
     adminOverview: () => request<{ data: Record<string, unknown> }>('/admin/overview'),
+    adminClassDashboards: () => request<{ data: Array<{ full_name: string; email: string; class_code: string; updated_at: string; tasks_completed: number; tasks_total: number; quizzes_taken: number; average_score: number | null }> }>('/admin/class-dashboards'),
     adminTaxonomy: () => request<{ data: { levels: Record<string, unknown>[]; grades: Record<string, unknown>[]; programs: Record<string, unknown>[]; subjects: Record<string, unknown>[] } }>('/admin/taxonomy'),
     adminReview: () => request<{ data: Record<string, unknown>[] }>('/admin/review'),
     adminUsers: (filters?: { search?: string; role?: string; status?: string; limit?: number; offset?: number }) => { const params = new URLSearchParams(); for (const [key, value] of Object.entries(filters || {})) if (value !== undefined && value !== '') params.set(key, String(value)); return request<{ data: Record<string, unknown>[]; meta: { total: number; limit: number; offset: number } }>(`/admin/users${params.size ? `?${params.toString()}` : ''}`) },

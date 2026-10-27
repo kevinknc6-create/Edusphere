@@ -13,7 +13,7 @@ const contentTabs = [
     ['Courses', 'courses'], ['Modules', 'modules'], ['Lessons', 'lessons'], ['Lesson notes', 'notes'],
     ['Examples', 'examples'], ['Exercises', 'exercises'], ['Homework', 'assignments'], ['Quizzes', 'quizzes'], ['Tests', 'tests'], ['Exams', 'exams'],
 ] as const
-const tabs = [['Dashboard', 'dashboard'], ['Schools', 'schools'], ...contentTabs, ['Teachers', 'teachers'], ['Teacher Verification', 'verification'], ['Content Review', 'review'], ['Users', 'students'], ['AI Tutor', 'ai'], ['Settings', 'settings'], ['Audit Logs', 'audit']] as const
+const tabs = [['Dashboard', 'dashboard'], ['Schools', 'schools'], ...contentTabs, ['Teachers', 'teachers'], ['Teacher Verification', 'verification'], ['Content Review', 'review'], ['Users', 'students'], ['Class Dashboards', 'class-dashboards'], ['AI Tutor', 'ai'], ['Settings', 'settings'], ['Audit Logs', 'audit']] as const
 
 function text(value: unknown) { return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value) }
 function titleFor(record: RecordValue) { return text(record.title || record.name || record.prompt || 'Untitled') }
@@ -27,6 +27,7 @@ export default function AdminWorkspace({ role, navigationTargetId }: AdminWorksp
     const [teachers, setTeachers] = useState<RecordValue[]>([])
     const [users, setUsers] = useState<RecordValue[]>([])
     const [userTotal, setUserTotal] = useState(0)
+    const [classDashboards, setClassDashboards] = useState<RecordValue[]>([])
     const [userFilters, setUserFilters] = useState({ role: '', status: '' })
     const [auditLogs, setAuditLogs] = useState<RecordValue[]>([])
     const [reviewRows, setReviewRows] = useState<RecordValue[]>([])
@@ -57,6 +58,7 @@ export default function AdminWorkspace({ role, navigationTargetId }: AdminWorksp
                 setUserTotal(result.meta.total)
                 return
             }
+            if (nextTab === 'class-dashboards') { setClassDashboards((await api.adminClassDashboards()).data); return }
             if (nextTab === 'audit') { setAuditLogs((await api.adminAuditLogs()).data); return }
             const content = contentTabs.find((item) => item[1] === nextTab)
             if (content) {
@@ -123,11 +125,27 @@ export default function AdminWorkspace({ role, navigationTargetId }: AdminWorksp
         {tab === 'verification' && <TeacherSection teachers={teachers} create={async (input) => { await api.createAdminTeacher(input); await loadTab(tab) }} verify={async (id, status) => { await api.updateTeacherStatus(id, status); await loadTab(tab) }} resend={async (id) => { await api.resendTeacherVerification(id); await loadTab(tab) }} savePermissions={async (id, permissions) => { await api.setTeacherPermissions(id, permissions); await loadTab(tab) }} verification />}
         {tab === 'review' && <ReviewSection rows={reviewRows} />}
         {tab === 'students' && <UsersSection users={users} total={userTotal} filters={filters} setFilters={setFilters} userFilters={userFilters} setUserFilters={setUserFilters} busy={busy} updateStatus={updateUserStatus} />}
+        {tab === 'class-dashboards' && <ClassDashboardSection rows={classDashboards} />}
         {tab === 'ai' && <section className="admin-panel admin-full-panel"><p className="eyebrow">AI Tutor governance</p><h2>AI drafts remain reviewable</h2><p>Teacher and AI-generated material must be saved as draft content and published through this CMS before students can see it.</p></section>}
         {tab === 'settings' && <section className="admin-panel admin-full-panel"><p className="eyebrow">Platform settings</p><h2>Publishing policy</h2><p>Students receive only published content that matches their education level, class, and program profile.</p></section>}
         {tab === 'audit' && <AuditSection rows={auditLogs} />}
         </div>
     </>
+}
+
+function ClassDashboardSection({ rows }: { rows: RecordValue[] }) {
+    return <section className="admin-panel admin-full-panel">
+        <div className="section-heading compact"><div><p className="eyebrow">Student activity</p><h2>S1–S3 class dashboard progress</h2></div><span className="muted-count">{rows.length} students synced</span></div>
+        <p className="admin-empty">Progress is synced from each student’s class dashboard. Quiz scores here are the best scores saved per subject.</p>
+        <div className="admin-table">
+            {rows.map((row) => <div className="admin-table-row" key={`${text(row.email)}-${text(row.class_code)}`}>
+                <div><strong>{text(row.full_name)}</strong><small>{text(row.email)} · {text(row.class_code)}</small><small>Last synced {text(row.updated_at)}</small></div>
+                <span className="status-pill published">{text(row.tasks_completed)}/{text(row.tasks_total)} tasks</span>
+                <span>{text(row.quizzes_taken)} scores · {row.average_score === null ? 'No score' : `${text(row.average_score)}% average`}</span>
+            </div>)}
+            {!rows.length && <p className="admin-empty">No S1–S3 dashboard progress has been synced yet.</p>}
+        </div>
+    </section>
 }
 
 function Overview({ data }: { data: RecordValue | null }) {

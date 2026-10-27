@@ -113,6 +113,45 @@ router.get('/me/learning-dashboard', asyncHandler(async (request, response) => {
 router.get('/me/tvet-dashboard', asyncHandler(async (request, response) => { response.json({ data: await curriculumDashboard(request.auth!.userId) }) }))
 router.get('/me/university-dashboard', asyncHandler(async (request, response) => { response.json({ data: await curriculumDashboard(request.auth!.userId) }) }))
 
+const classDashboardInput = z.object({
+    classCode: z.enum(['S1', 'S2', 'S3']),
+    data: z.record(z.string(), z.unknown()),
+})
+
+async function requireMatchingClass(userId: string, classCode: string) {
+    const result = await pool.query(`
+        SELECT g.code
+        FROM students s
+        JOIN grades g ON g.id = s.grade_id
+        WHERE s.user_id = $1`, [userId])
+    const expectedCode = result.rows[0]?.code
+    if (!expectedCode || !new RegExp(`(?:^|_)${classCode.slice(1)}$`, 'i').test(expectedCode)) {
+        throw new HttpError(403, 'This dashboard does not match your registered class')
+    }
+}
+
+router.get('/me/class-dashboard', asyncHandler(async (request, response) => {
+    const classCode = z.enum(['S1', 'S2', 'S3']).parse(request.query.classCode)
+    await requireMatchingClass(request.auth!.userId, classCode)
+    const result = await pool.query('SELECT class_code, data, updated_at FROM class_dashboard_state WHERE user_id = $1', [request.auth!.userId])
+    const saved = result.rows[0]
+    if (saved && saved.class_code !== classCode) throw new HttpError(403, 'This dashboard does not match your registered class')
+    response.json({ data: saved || null })
+}))
+
+router.put('/me/class-dashboard', asyncHandler(async (request, response) => {
+    const input = classDashboardInput.parse(request.body)
+    if (JSON.stringify(input.data).length > 500_000) throw new HttpError(413, 'Class dashboard data is too large')
+    await requireMatchingClass(request.auth!.userId, input.classCode)
+    const result = await pool.query(`
+        INSERT INTO class_dashboard_state (user_id, class_code, data, updated_at)
+        VALUES ($1, $2, $3::jsonb, now())
+        ON CONFLICT (user_id) DO UPDATE
+        SET class_code = EXCLUDED.class_code, data = EXCLUDED.data, updated_at = now()
+        RETURNING class_code, data, updated_at`, [request.auth!.userId, input.classCode, JSON.stringify(input.data)])
+    response.json({ data: result.rows[0] })
+}))
+
 router.get('/me/learning-summary', asyncHandler(async (request, response) => {
     const studentId = request.auth?.userId
     const [profile, courses, scores, homework, activity, achievements] = await Promise.all([

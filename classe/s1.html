@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Edusphere – Senior 1 Dashboard</title>
+<style>
+:root{--bg:#f4f7fc;--card:#fff;--ink:#14233f;--mut:#6a7894;--blue:#1d5fe0;--blue2:#0b3fa8;--line:#e3eaf6;--sh:0 2px 10px rgba(30,70,150,.08);--soft:#e9f0ff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1626;--card:#16213a;--ink:#e8eefb;--mut:#93a3c4;--line:#243354;--soft:#1f2f55;--sh:0 2px 10px rgba(0,0,0,.4)}}
+:root[data-theme="dark"]{--bg:#0e1626;--card:#16213a;--ink:#e8eefb;--mut:#93a3c4;--line:#243354;--soft:#1f2f55;--sh:0 2px 10px rgba(0,0,0,.4)}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,Arial,sans-serif;font-size:14px}
+button{font:inherit;cursor:pointer}
+.side{position:fixed;inset:0 auto 0 0;width:240px;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 14px;z-index:20;transition:transform .2s;overflow-y:auto}
+.brand{display:flex;gap:10px;align-items:center;padding:0 6px 16px}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#2f80ff,#0b3fa8);display:grid;place-items:center;color:#fff;font-size:22px}
+.brand b{font-size:20px;color:var(--blue)}.brand small{display:block;color:var(--mut);font-size:11px}
+.nav button{display:flex;width:100%;gap:12px;align-items:center;border:0;background:none;color:var(--ink);padding:11px 12px;border-radius:12px;margin-bottom:3px;text-align:left;font-size:14.5px}
+.nav button:hover{background:var(--bg)}.nav button.on{background:var(--blue);color:#fff;font-weight:600}
+.nav span{width:22px;text-align:center}
+.mot{margin-top:auto;background:linear-gradient(135deg,#e5efff,#cfe0ff);color:#0b3fa8;border-radius:16px;padding:16px;font-weight:700;line-height:1.35}
+.mot small{display:block;font-weight:600;margin-top:8px;color:#1d5fe0}
+.main{margin-left:240px;padding:0 24px 24px}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--bg);display:flex;gap:14px;align-items:center;padding:14px 0}
+.burger{display:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 11px}
+.search{flex:1;max-width:560px;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:0 14px;box-shadow:var(--sh)}
+.search input{flex:1;border:0;background:none;color:var(--ink);padding:12px 0;font:inherit;outline:0}
+.sp{flex:1}.pop{position:relative}
+.ib{position:relative;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:12px;width:42px;height:42px;font-size:18px}
+.badge{position:absolute;top:-5px;right:-5px;background:#e5283c;color:#fff;border-radius:99px;font-size:11px;min-width:18px;height:18px;display:grid;place-items:center;font-weight:700}
+.prof{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:14px;padding:5px 12px 5px 6px;text-align:left}
+.av{width:34px;height:34px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-weight:700;flex:none}
+.prof small{display:block;color:var(--mut);font-size:11px}
+.menu{display:none;position:absolute;right:0;top:calc(100% + 8px);width:270px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:6px;z-index:30}
+.menu.open{display:block}.menu a{display:block;padding:10px 12px;border-radius:10px;color:var(--ink);cursor:pointer;font-size:13.5px}.menu a:hover{background:var(--bg)}
+.menu a small{display:block;color:var(--mut)}.menu a.rd{opacity:.55}
+.ban{position:relative;overflow:hidden;border-radius:22px;background:linear-gradient(110deg,#0b3fa8,#1d5fe0 55%,#4a9bff);color:#fff;padding:34px 36px;display:flex;justify-content:space-between;align-items:center;gap:20px;min-height:170px;margin-bottom:22px}
+.ban h1{margin:0 0 8px;font-size:30px}.ban p{margin:0;opacity:.92}
+.quote{text-align:right;max-width:340px;font-style:italic;font-size:16px;position:relative;z-index:1}.quote b{display:block;font-style:normal;margin-top:6px;opacity:.85;font-weight:500}
+.ill{font-size:64px;margin-bottom:6px}
+.sec{background:var(--card);border-radius:20px;padding:20px;box-shadow:var(--sh);margin-bottom:22px}
+.sh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.sh h2{margin:0;font-size:19px}.sh h2 em{font-style:normal;font-weight:500;color:var(--mut);font-size:14px;margin-left:6px}
+.sh p{margin:4px 0 0;color:var(--mut);font-size:13px}
+.pill{background:var(--soft);color:var(--blue);font-weight:700;padding:6px 14px;border-radius:99px;font-size:13px;white-space:nowrap}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.card{border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--card);box-shadow:var(--sh);transition:transform .15s;cursor:pointer}
+.card:hover{transform:translateY(-2px)}
+.ch{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:21px;flex:none}
+.ch b{font-size:14px;line-height:1.25}.ch small{display:block;color:var(--mut);font-size:12px;font-weight:400;margin-top:2px}
+.pr{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.bar{flex:1;height:8px;background:var(--line);border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,#1d5fe0,#2fc4b2)}
+.pr span{font-weight:700;font-size:13px;min-width:34px;text-align:right}
+.acts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.acts.two{grid-template-columns:repeat(2,1fr)}
+.acts button{border:0;background:var(--soft);color:var(--blue);border-radius:8px;padding:7px 2px;font-size:12px;font-weight:600}
+.acts button:hover{background:var(--blue);color:#fff}
+.tip{display:flex;gap:12px;align-items:center;background:#fff7dd;color:#5a4400;border-radius:16px;padding:14px 18px;margin-bottom:18px}
+.foot{text-align:center;color:var(--mut);font-size:13px;padding:6px}
+.empty{text-align:center;color:var(--mut);padding:30px}
+#toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:#14233f;color:#fff;padding:12px 18px;border-radius:12px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:80;max-width:90vw}
+#toast.show{opacity:1}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+/* new components */
+.b1,.b2,.b1w{border:0;border-radius:10px;padding:9px 16px;font-weight:600}
+.b1{background:var(--blue);color:#fff}.b1:hover{background:var(--blue2)}
+.b2{background:var(--soft);color:var(--blue)}.b2:hover{background:var(--line)}
+.b1w{background:#fff;color:var(--blue2)}
+.bt{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:99px;padding:6px 14px;font-size:13px}
+.chips button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.tabs button{border:0;background:var(--soft);color:var(--blue);border-radius:10px;padding:9px 16px;font-weight:600}
+.tabs button.on{background:var(--blue);color:#fff}
+.back{border:0;background:none;color:var(--blue);font-weight:600;padding:0 0 12px}
+.nl{margin:0 0 14px;padding-left:20px;line-height:1.7}
+.row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;background:var(--card)}
+.row.done span.tx{text-decoration:line-through;color:var(--mut)}
+.row .tx{flex:1}.row input[type=checkbox]{width:18px;height:18px}
+.x{border:0;background:none;color:#e5283c;font-size:16px}
+input.f,textarea.f,select.f{width:100%;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:10px 12px;font:inherit;margin:4px 0 10px}
+.inl{display:flex;gap:8px}.inl input{margin:0}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.st{background:var(--soft);border-radius:14px;padding:14px}.st b{display:block;font-size:24px;color:var(--blue)}.st small{color:var(--mut)}
+.opt{display:block;width:100%;text-align:left;border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:12px 14px;margin-bottom:10px;font-size:15px}
+.opt:hover{border-color:var(--blue)}.opt.sel{border-color:var(--blue);background:var(--soft)}
+.opt.ok{border-color:#1fa65a;background:#dff5e6;color:#0d4d28}.opt.bad{border-color:#e5283c;background:#ffe3e6;color:#7a0f1c}
+.qh{display:flex;justify-content:space-between;color:var(--mut);margin-bottom:10px;font-weight:600}
+.res{text-align:center}.res .big{font-size:56px;font-weight:800;color:var(--blue)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal .hd{text-align:center;color:var(--mut);font-size:12px;font-weight:700;padding:4px}
+.cal button{min-height:58px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:6px;text-align:left;font-size:13px;position:relative}
+.cal button:hover{border-color:var(--blue)}.cal button.td{background:var(--blue);color:#fff}
+.cal button.ev:after{content:"";position:absolute;bottom:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#f0a020}
+.cal .blank{border:0;background:none;pointer-events:none}
+.msgw{display:grid;grid-template-columns:230px 1fr;gap:14px}
+.ct button{display:flex;width:100%;gap:10px;align-items:center;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:10px;margin-bottom:8px;text-align:left}
+.ct button.on{border-color:var(--blue);background:var(--soft)}
+.th{height:320px;overflow-y:auto;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg);margin-bottom:10px;display:flex;flex-direction:column;gap:8px}
+.bub{max-width:75%;padding:9px 13px;border-radius:14px;background:var(--card);border:1px solid var(--line)}
+.bub.me{align-self:flex-end;background:var(--blue);color:#fff;border-color:var(--blue)}
+table.t{width:100%;border-collapse:collapse}table.t td,table.t th{padding:10px;border-bottom:1px solid var(--line);text-align:left}
+.sw{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);gap:10px}
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;z-index:70;padding:16px}
+.md{background:var(--card);color:var(--ink);border-radius:18px;padding:22px;width:min(420px,100%)}
+.md h3{margin:0 0 12px}.mb{display:flex;gap:8px;justify-content:flex-end}
+#login{position:fixed;inset:0;background:var(--bg);z-index:90;display:none;place-items:center;padding:20px}
+#login.on{display:grid}.lg{background:var(--card);border-radius:22px;padding:30px;width:min(380px,100%);text-align:center;box-shadow:var(--sh)}
+@media(max-width:900px){.side{transform:translateX(-100%)}.side.open{transform:none;box-shadow:0 0 40px rgba(0,0,0,.3)}.main{margin-left:0;padding:0 14px 20px}.burger{display:block}.prof .t{display:none}.ban{flex-direction:column;align-items:flex-start;padding:24px}.quote{text-align:left}.msgw{grid-template-columns:1fr}}
+@media(max-width:520px){.grid{grid-template-columns:1fr}.ban h1{font-size:24px}}
+</style></head>
+<body>
+<aside class="side" id="side">
+ <div class="brand"><div class="logo">🎓</div><div><b>Edusphere</b><small>Learn • Grow • Build Your Future</small></div></div>
+ <nav class="nav" id="nav"></nav>
+ <div class="mot">Small steps today, big dreams tomorrow.<small id="keep">Keep going!</small></div>
+</aside>
+<div class="main">
+ <header class="top">
+  <button class="burger" data-act="burger" aria-label="Menu">☰</button>
+  <label class="search">🔍<input id="q" placeholder="Search subjects, notes, quizzes..." autocomplete="off"></label>
+  <div class="sp"></div>
+  <div class="pop"><button class="ib" data-act="bell" aria-label="Notifications">🔔<span class="badge" id="nb">3</span></button>
+   <div class="menu" id="nm"></div></div>
+  <div class="pop"><button class="prof" data-act="pmenu"><span class="av" id="av">K</span><span class="t"><b id="pname">Kevin</b><small>S1 Student</small></span><span>▾</span></button>
+   <div class="menu" id="pm"><a data-act="nav" data-v="profile">👤 My Profile</a><a data-act="nav" data-v="settings">⚙️ Settings</a><a data-act="theme" data-t="toggle">🌓 Toggle theme</a><a data-act="logout">🚪 Log out</a></div></div>
+ </header>
+ <div id="view"></div>
+ <div class="tip">💡 <span><b>Tip:</b> Complete your daily tasks, stay consistent, and make the most of your learning journey!</span></div>
+ <div class="foot">Edusphere • Senior 1 • Rwanda Education Board</div>
+</div>
+<div id="login"><div class="lg"><div class="logo" style="margin:0 auto 12px">🎓</div><h2 style="margin:0 0 6px">You are logged out</h2><p style="color:var(--mut)">Enter your name to continue learning.</p><input class="f" id="ln" placeholder="Your name"><button class="b1" style="width:100%" data-act="login">Log in</button></div></div>
+<div id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+const cap=s=>s[0].toUpperCase()+s.slice(1);
+function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._);t._=setTimeout(()=>t.classList.remove("show"),2200)}
+
+/* ---------- data ---------- */
+const CORE=[["English",68,"🔤","#e8e0ff"],["Kinyarwanda",72,"🌿","#dff5e6"],["Mathematics",56,"🧮","#dbe8ff"],["Physics",48,"⚛️","#dbe8ff"],["Chemistry",42,"🧪","#e6e4ff"],["Biology and Health Sciences",61,"🧬","#dff5e6"],["ICT",53,"🖥️","#dbf0ff"],["History and Citizenship",47,"🏛️","#f0e2ff"],["Geography and Environment",50,"🌍","#d9f5ee"],["Entrepreneurship",38,"💡","#fff0d6"],["French",45,"🇫🇷","#ffe3e6"],["Kiswahili",52,"💬","#ffe8cf"],["Religion and Ethics",60,"☀️","#fff3cc"],["Physical Education and Sports",70,"🏃","#dbe8ff"]];
+const ELEC=[["Music, Dance and Drama",58,"🎵","#f6e0ff"],["Fine Arts and Crafts",46,"🎨","#ffe8cf"],["Home Sciences",35,"🏠","#ffe3e6"],["Agriculture and Animal Husbandry",28,"🌱","#dff5e6"]];
+const EXTRA=[["World Languages","Learn new languages","🌐","#dbe8ff"],["Computer Science","Build digital skills","💻","#e6e4ff"],["Financial Literacy","Manage your money","💰","#fff3cc"],["Environmental Studies","A greener future","🌳","#dff5e6"],["Art & Design","Be creative","🖌️","#ffe8cf"],["General Knowledge","Expand your mind","🧠","#f6e0ff"]];
+const SUBJ=[...CORE.map(i=>({n:i[0],p:i[1],ic:i[2],col:i[3],k:"core"})),...ELEC.map(i=>({n:i[0],p:i[1],ic:i[2],col:i[3],k:"elec"})),...EXTRA.map(i=>({n:i[0],sub:i[1],ic:i[2],col:i[3],k:"extra",p:0}))];
+SUBJ.forEach(s=>s.id=slug(s.n));
+const byId=id=>SUBJ.find(s=>s.id===id);
+const SECS=[
+ {t:"Core Subjects",s:"(Rwanda S1 Curriculum)",d:"These are the official subjects you study in Senior 1 (Rwanda Education Board).",b:"14 Subjects",k:"core"},
+ {t:"Elective Subjects",s:"(Choose one or more)",d:"These are optional subjects you can take based on your interest and school availability.",b:"4 Electives",k:"elec"},
+ {t:"Global Learning Extras",s:"",d:"These are extra subjects for personal growth and global skills (not part of the official Rwanda S1 curriculum).",b:"6 Extras",k:"extra"}];
+const KB={};
+const K=(n,notes,qs)=>KB[n]={n:notes,q:qs};
+K("English",["A sentence needs a subject and a verb.","Nouns name things, verbs show action, adjectives describe nouns.","Read daily and write new words with their meanings."],[["Which word is a verb?","run","table","blue"],["Which sentence is correct?","She goes to school.","She go to school.","She going school."]]);
+K("Kinyarwanda",["Kinyarwanda is a Bantu language spoken across Rwanda.","'Muraho' is a common greeting meaning hello.","'Murakoze' means thank you."],[["What does 'Murakoze' mean?","Thank you","Good night","Sorry"],["Kinyarwanda is mainly spoken in…","Rwanda","Egypt","Chad"]]);
+K("Mathematics",["BODMAS: Brackets, Orders, Division, Multiplication, Addition, Subtraction.","Perimeter of a rectangle = 2 × (length + width).","Area of a triangle = ½ × base × height."],[["What is 3 + 4 × 2?","11","14","10"],["Area of a rectangle 5 cm by 4 cm?","20 cm²","18 cm²","9 cm²"]]);
+K("Physics",["Speed = distance ÷ time.","Force is measured in newtons (N).","Energy cannot be created or destroyed, only changed."],[["What is the unit of force?","Newton","Joule","Watt"],["Which formula gives speed?","distance ÷ time","time ÷ distance","distance × time"]]);
+K("Chemistry",["Matter exists as solid, liquid and gas.","The chemical formula of water is H₂O.","An element contains only one kind of atom."],[["What is the formula of water?","H₂O","CO₂","NaCl"],["Which is a gas at room temperature?","Oxygen","Iron","Gold"]]);
+K("Biology and Health Sciences",["The cell is the basic unit of life.","Plants make food by photosynthesis.","Washing hands helps prevent disease."],[["What is the basic unit of life?","The cell","The organ","The atom"],["Which gas do plants take in for photosynthesis?","Carbon dioxide","Nitrogen","Helium"]]);
+K("ICT",["A computer has input, processing, storage and output.","A strong password mixes letters, numbers and symbols.","The CPU is the brain of the computer."],[["Which is an input device?","Keyboard","Monitor","Speaker"],["CPU stands for…","Central Processing Unit","Computer Personal Unit","Central Program Utility"]]);
+K("History and Citizenship",["Rwanda gained independence on 1 July 1962.","A citizen has both rights and responsibilities.","Primary sources are created at the time of an event."],[["In which year did Rwanda gain independence?","1962","1957","1980"],["What is the capital city of Rwanda?","Kigali","Huye","Rubavu"]]);
+K("Geography and Environment",["Rwanda is known as the Land of a Thousand Hills.","Latitude lines run east–west; longitude lines run north–south.","Deforestation harms the environment."],[["Which country is the Land of a Thousand Hills?","Rwanda","Egypt","Chad"],["Which is the largest ocean?","Pacific","Atlantic","Indian"]]);
+K("Entrepreneurship",["An entrepreneur spots a need and creates a solution.","Profit = income − expenses.","Saving part of your income helps build capital."],[["Profit equals…","income − expenses","income + expenses","expenses − income"],["An entrepreneur is someone who…","starts and runs a business","avoids all risk","never plans"]]);
+K("French",["'Bonjour' means hello.","'Merci' means thank you.","French nouns are masculine (le) or feminine (la)."],[["'Merci' means…","Thank you","Please","Goodbye"],["'Bonjour' means…","Hello","Good night","Sorry"]]);
+K("Kiswahili",["'Habari' means hello / news.","'Asante' means thank you.","'Shule' means school."],[["'Asante' means…","Thank you","Welcome","Water"],["'Shule' means…","School","House","Book"]]);
+K("Religion and Ethics",["Honesty means telling the truth.","Respect means valuing others and their beliefs.","Ethics are principles about right and wrong."],[["Honesty means…","telling the truth","hiding mistakes","copying others"],["Respecting others' beliefs shows…","tolerance","anger","fear"]]);
+K("Physical Education and Sports",["Warm up before exercise to prevent injury.","Drink water to stay hydrated.","Teamwork and fair play matter in sport."],[["Why do we warm up?","To prevent injury","To fall asleep","To get tired"],["How many players does a football team have on the field?","11","9","15"]]);
+K("Music, Dance and Drama",["Rhythm is the pattern of beats in music.","Pitch is how high or low a sound is.","Drama tells a story through acting."],[["Pitch describes…","how high or low a sound is","how long a song is","who wrote it"],["Rhythm is…","a pattern of beats","a type of paint","a story"]]);
+K("Fine Arts and Crafts",["The primary colours are red, yellow and blue.","Mixing blue and yellow makes green.","Crafts are objects made by hand."],[["Blue + yellow =","Green","Orange","Purple"],["Which is a primary colour?","Red","Green","Orange"]]);
+K("Home Sciences",["A balanced diet includes proteins, carbohydrates and vitamins.","Wash your hands before cooking.","A budget helps manage household money."],[["Which food is rich in protein?","Beans","Sugar","Cooking oil"],["Before cooking you should…","wash your hands","skip cleaning","eat first"]]);
+K("Agriculture and Animal Husbandry",["Crop rotation keeps soil fertile.","Livestock need clean water and feed.","Compost is made from decayed plant matter."],[["Compost is made from…","decayed plant matter","plastic","stones"],["Crop rotation helps…","keep soil fertile","kill all insects","stop rain"]]);
+K("World Languages",["Greetings are the best place to start a new language.","Practise speaking a little every day.","Songs and stories build vocabulary."],[["What improves a new language fastest?","Practising daily","Studying once a year","Never speaking"],["A good first topic to learn is…","Greetings","Legal contracts","Poetry meters"]]);
+K("Computer Science",["An algorithm is a step-by-step set of instructions.","Binary uses only 0 and 1.","Debugging means finding and fixing errors."],[["An algorithm is…","step-by-step instructions","a type of keyboard","a virus"],["Binary uses which digits?","0 and 1","1 to 9","A and B"]]);
+K("Financial Literacy",["A budget plans how you spend and save.","Saving regularly builds a safety net.","Needs come before wants."],[["A budget helps you…","plan spending and saving","spend without thinking","never save"],["Which is a need?","Food","Game console","Designer shoes"]]);
+K("Environmental Studies",["Trees absorb carbon dioxide and give oxygen.","Reduce, reuse and recycle to cut waste.","Clean water is a limited resource."],[["The 3 Rs are…","Reduce, reuse, recycle","Read, write, run","Rest, relax, repeat"],["Trees absorb which gas?","Carbon dioxide","Helium","Neon"]]);
+K("Art & Design",["Line, shape, colour and texture are elements of art.","Warm colours are red, orange and yellow.","Design solves a problem creatively."],[["Which is a warm colour?","Orange","Blue","Green"],["Elements of art include…","Line and shape","Addition and subtraction","Noun and verb"]]);
+K("General Knowledge",["There are seven continents.","Africa is the second largest continent.","Kigali is the capital of Rwanda."],[["How many continents are there?","7","5","9"],["Which planet is the Red Planet?","Mars","Venus","Jupiter"]]);
+
+/* ---------- state ---------- */
+const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return iso(d)};
+const DEF=()=>({name:"Kevin",school:"",theme:"system",notif:true,bonus:{},tasks:{},mine:{},scores:{},events:[{d:addDays(1),t:"English – Reading task due"},{d:addDays(3),t:"Mathematics – Quiz 4"},{d:addDays(14),t:"Term exams begin"}],msgs:{},read:[0,0,0],last:null,out:false});
+const CLASS_CODE="S1";
+let SESSION_USER=null;try{SESSION_USER=JSON.parse(sessionStorage.getItem("edusphere-user-session")||"null")}catch(e){}
+const STATE_KEY=SESSION_USER&&SESSION_USER.id?"edusphere-class-dashboard:"+SESSION_USER.id:"";
+let S;try{const saved=STATE_KEY&&localStorage.getItem(STATE_KEY);const oldOwner=localStorage.getItem("edusphere-user-id");const oldState=localStorage.getItem("edusphere");S=Object.assign(DEF(),JSON.parse(saved||(!oldOwner||SESSION_USER&&oldOwner===SESSION_USER.id?oldState:null)||"{}"))}catch(e){S=DEF()}
+if(SESSION_USER&&SESSION_USER.fullName){S.name=SESSION_USER.fullName;S.out=false}
+let syncReady=false,syncTimer=null;
+async function classApi(path,method="GET",body=null,retry=true){const token=sessionStorage.getItem("edusphere-access-token");if(!SESSION_USER||!SESSION_USER.id||!token){window.location.replace("/");throw new Error("Sign in through the EduSphere app to open your class dashboard.")}const options={method,credentials:"include",headers:{Authorization:"Bearer "+token}};if(body){options.headers["Content-Type"]="application/json";options.body=JSON.stringify(body)}let response=await fetch(path,options);if(response.status===401&&retry){const refresh=await fetch("/api/auth/refresh",{method:"POST",credentials:"include"});if(refresh.ok){const session=await refresh.json();sessionStorage.setItem("edusphere-access-token",session.accessToken);return classApi(path,method,body,false)}sessionStorage.removeItem("edusphere-access-token");sessionStorage.removeItem("edusphere-user-session");localStorage.removeItem("edusphere-auth");window.location.replace("/");throw new Error("Your session expired. Sign in again.")}const result=response.status===204?null:await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error&&result.error.message||result.message||"Class dashboard sync failed.");return result}
+async function syncClassState(){await classApi("/api/student/me/class-dashboard","PUT",{classCode:CLASS_CODE,data:S})}
+function save(){try{if(STATE_KEY){localStorage.setItem(STATE_KEY,JSON.stringify(S));localStorage.setItem("edusphere-user-id",SESSION_USER.id)}}catch(e){toast("Local progress could not be saved: "+e.message)}if(syncReady){clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncClassState().catch(e=>toast("Progress could not sync: "+e.message)),500)}}
+async function loadClassState(){try{const result=await classApi("/api/student/me/class-dashboard?classCode="+CLASS_CODE);if(result.data){S=Object.assign(DEF(),result.data.data);S.name=SESSION_USER.fullName||S.name;S.out=false;try{localStorage.setItem(STATE_KEY,JSON.stringify(S));localStorage.setItem("edusphere-user-id",SESSION_USER.id)}catch(e){toast("Local progress could not be saved: "+e.message)}}else{syncReady=true;await syncClassState()}syncReady=true}catch(e){syncReady=false;toast(e.message)}chrome();show("dashboard")}
+async function logoutClass(){clearTimeout(syncTimer);let message="";try{if(syncReady)await syncClassState();await classApi("/api/auth/logout","POST")}catch(e){message=e.message}sessionStorage.removeItem("edusphere-access-token");sessionStorage.removeItem("edusphere-user-session");localStorage.removeItem("edusphere-auth");if(message){toast("Signed out here, but the server could not confirm sign-out: "+message);setTimeout(()=>window.location.replace("/"),1800)}else window.location.replace("/")}
+const prog=s=>s.k==="extra"?null:Math.min(100,s.p+(S.bonus[s.id]||0));
+const getTasks=id=>S.tasks[id]||(S.tasks[id]=[{t:"Read the notes",d:0},{t:"Take the quiz",d:0},{t:"Complete a practice exercise",d:0}]);
+function stats(){const subs=SUBJ.filter(s=>s.k!=="extra");let done=0,total=0;SUBJ.forEach(s=>getTasks(s.id).forEach(t=>{total++;if(t.d)done++}));const avg=Math.round(subs.reduce((n,s)=>n+prog(s),0)/subs.length);let qz=0;Object.values(S.scores).forEach(o=>{if(o.quiz!=null)qz++});return{avg,done,total,qz}}
+const examDate=s=>new Date(2026,11,2+SUBJ.indexOf(s));
+const fmtD=d=>d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+const NOTIFS=[{t:"New quiz available",s:"Mathematics – Quiz 4",go:["subject","mathematics","quizzes"]},{t:"Assignment due tomorrow",s:"English – Reading task",go:["assignments"]},{t:"Exam timetable updated",s:"Check the Calendar",go:["calendar"]}];
+
+/* ---------- chrome ---------- */
+function applyTheme(){const r=document.documentElement;if(S.theme==="system")delete r.dataset.theme;else r.dataset.theme=S.theme}
+function effTheme(){return S.theme==="system"?(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"):S.theme}
+function chrome(){
+ $("av").textContent=(S.name[0]||"K").toUpperCase();$("pname").textContent=S.name;$("keep").textContent="Keep going, "+S.name+"!";
+ const un=S.read.filter(x=>!x).length;$("nb").style.display=(un&&S.notif)?"grid":"none";$("nb").textContent=un;
+ $("nm").innerHTML=NOTIFS.map((n,i)=>`<a data-act="notif" data-i="${i}" class="${S.read[i]?"rd":""}"><b>${n.t}</b><small>${n.s}</small></a>`).join("")+`<a data-act="readall" style="text-align:center;color:var(--blue)">Mark all as read</a>`;
+ $("login").classList.toggle("on",!!S.out);applyTheme();
+}
+const NAVL=[["🏠","Dashboard","dashboard"],["📖","My Learning Space","learning"],["📚","Subjects","subjects"],["📝","Notes","notes"],["❓","Quizzes","quizzes"],["📋","Assignments","assignments"],["🎓","Exams","exams"],["📅","Calendar","calendar"],["📊","Progress","progress"],["💬","Messages","messages"]];
+$("nav").innerHTML=NAVL.map(n=>`<button data-act="nav" data-v="${n[2]}"><span>${n[0]}</span>${n[1]}</button>`).join("");
+function modal(h){closeModal();const m=document.createElement("div");m.className="mo";m.id="mo";m.innerHTML=`<div class="md" role="dialog">${h}</div>`;m.onclick=e=>{if(e.target===m)closeModal()};document.body.appendChild(m)}
+function closeModal(){const m=$("mo");if(m)m.remove()}
+function ask(title,ph,cb){modal(`<h3>${title}</h3><input class="f" id="mq" placeholder="${ph}"><div class="mb"><button class="b2" data-act="mclose">Cancel</button><button class="b1" id="mok">Save</button></div>`);const i=$("mq");i.focus();const ok=()=>{const v=i.value.trim();if(v){closeModal();cb(v)}};$("mok").onclick=ok;i.onkeydown=e=>{if(e.key==="Enter")ok()}}
+function confirmBox(msg,cb,label){modal(`<h3>${msg}</h3><div class="mb"><button class="b2" data-act="mclose">Cancel</button><button class="b1" id="mok">${label||"Yes"}</button></div>`);$("mok").onclick=()=>{closeModal();cb()}}
+
+/* ---------- views ---------- */
+let cur=["dashboard"],prev=["dashboard"],FILT="all",AFILT="all",Q=null,timer=null,CAL=null,MSG="class";
+const sec=h=>`<section class="sec">${h}</section>`;
+const hd=(t,sub,r)=>`<div class="sh"><div><h2>${t}</h2>${sub?`<p>${sub}</p>`:""}</div>${r||""}</div>`;
+function card(s){const full=s.k!=="extra";return `<div class="card" data-act="open" data-id="${s.id}"><div class="ch"><div class="ic" style="background:${s.col}">${s.ic}</div><b>${s.n}${full?"":`<small>${s.sub}</small>`}</b></div>${full?`<div class="pr"><div class="bar"><i style="width:${prog(s)}%"></i></div><span>${prog(s)}%</span></div>`:""}<div class="acts ${full?"":"two"}">${(full?["notes","quizzes","tasks","exams"]:["notes","quizzes"]).map(a=>`<button data-act="tab" data-id="${s.id}" data-tab="${a}">${cap(a)}</button>`).join("")}</div></div>`}
+function secHTML(S2){const items=SUBJ.filter(s=>s.k===S2.k);return `<section class="sec"><div class="sh"><div><h2>${S2.t}<em>${S2.s}</em></h2><p>${S2.d}</p></div><span class="pill">${S2.b}</span></div><div class="grid">${items.map(card).join("")}</div></section>`}
+const chips=(arr,cur,act)=>`<div class="chips">${arr.map(a=>`<button class="${a[0]===cur?"on":""}" data-act="${act}" data-f="${a[0]}">${a[1]}</button>`).join("")}</div>`;
+
+const VIEWS={
+dashboard(){return `<section class="ban"><div><h1>Welcome to Senior 1</h1><p>Learn, explore, and achieve your goals with Edusphere.</p><div class="bt"><button class="b1w" data-act="nav" data-v="learning">Continue learning</button></div></div><div class="quote"><div class="ill">🎓📚</div>"Education is the passport to the future."<b>— Malcolm X</b></div></section>`+SECS.map(secHTML).join("")},
+learning(){const st=stats();const low=SUBJ.filter(s=>s.k!=="extra").sort((a,b)=>prog(a)-prog(b)).slice(0,3);const last=S.last&&byId(S.last);
+ return sec(hd("My Learning Space","Your personal study hub, "+esc(S.name)+"."))+`<div class="stats"><div class="st"><b>${st.avg}%</b><small>Average progress</small></div><div class="st"><b>${st.done}/${st.total}</b><small>Tasks done</small></div><div class="st"><b>${st.qz}</b><small>Subjects quizzed</small></div><div class="st"><b>${S.events.filter(e=>e.d>=iso(new Date())).length}</b><small>Upcoming events</small></div></div>`+
+ (last?sec(hd("Continue where you left off")+`<div class="grid">${card(last)}</div>`):"")+
+ sec(hd("Recommended for you","Subjects that need the most attention.")+`<div class="grid">${low.map(card).join("")}</div>`)+
+ sec(hd("Quick actions")+`<div class="bt" style="margin:0"><button class="b1" data-act="nav" data-v="quizzes">Take a quiz</button><button class="b2" data-act="nav" data-v="assignments">View assignments</button><button class="b2" data-act="nav" data-v="calendar">Open calendar</button><button class="b2" data-act="nav" data-v="messages">Message a teacher</button></div>`)},
+subjects(){const items=SUBJ.filter(s=>FILT==="all"||s.k===FILT);return sec(hd("All Subjects","Browse every subject in one place.",chips([["all","All"],["core","Core"],["elec","Electives"],["extra","Extras"]],FILT,"filter"))+`<div class="grid">${items.map(card).join("")}</div>`)},
+subject(id,tab){const s=byId(id);if(!s)return VIEWS.dashboard();S.last=id;save();const tabs=s.k==="extra"?["notes","quizzes"]:["notes","quizzes","tasks","exams"];if(!tabs.includes(tab))tab="notes";const kb=KB[s.n];let body="";
+ if(tab==="notes"){const mine=S.mine[id]||[];body=`<h3>Key points</h3><ul class="nl">${kb.n.map(n=>`<li>${esc(n)}</li>`).join("")}</ul><h3>My notes</h3>${mine.map((n,i)=>`<div class="row"><span class="tx">${esc(n)}</span><button class="x" data-act="delnote" data-id="${id}" data-i="${i}" aria-label="Delete">✕</button></div>`).join("")||`<p style="color:var(--mut)">You have not added any notes yet.</p>`}<textarea class="f" id="ni" rows="3" placeholder="Write your own note..."></textarea><button class="b1" data-act="addnote" data-id="${id}">Add note</button>`}
+ if(tab==="quizzes"){const b=(S.scores[id]||{}).quiz;body=`<p>Test yourself with ${kb.q.length} questions. You get instant feedback after each answer.</p><p><b>Best score:</b> ${b==null?"not taken yet":b+"%"}</p><button class="b1" data-act="start" data-id="${id}" data-mode="quiz">Start quiz</button>`}
+ if(tab==="tasks"){const t=getTasks(id);body=t.map((x,i)=>`<div class="row ${x.d?"done":""}"><input type="checkbox" data-act="task" data-id="${id}" data-i="${i}" ${x.d?"checked":""}><span class="tx">${esc(x.t)}</span><button class="x" data-act="deltask" data-id="${id}" data-i="${i}" aria-label="Delete">✕</button></div>`).join("")||`<p style="color:var(--mut)">No tasks. Add one below.</p>`;body+=`<div class="inl" style="margin-top:12px"><input class="f" id="ti" data-enter="addtask" placeholder="New task..."><button class="b1" id="addtask" data-act="addtask" data-id="${id}">Add</button></div>`}
+ if(tab==="exams"){const b=(S.scores[id]||{}).exam;body=`<p><b>Exam date:</b> ${fmtD(examDate(s))}</p><p><b>Mock exam:</b> ${kb.q.length} questions, ${kb.q.length*30} seconds, no feedback until the end.</p><p><b>Best mock score:</b> ${b==null?"not taken yet":b+"%"}</p><div class="bt" style="margin-top:0"><button class="b1" data-act="start" data-id="${id}" data-mode="exam">Start mock exam</button><button class="b2" data-act="addexam" data-id="${id}">Add exam to calendar</button></div>`}
+ return `<button class="back" data-act="nav" data-v="subjects">← All subjects</button>`+sec(`<div class="ch"><div class="ic" style="background:${s.col}">${s.ic}</div><b style="font-size:20px">${s.n}${s.k==="extra"?`<small>${s.sub}</small>`:""}</b></div>${s.k!=="extra"?`<div class="pr"><div class="bar"><i style="width:${prog(s)}%"></i></div><span>${prog(s)}%</span></div>`:""}<div class="tabs">${tabs.map(t=>`<button class="${t===tab?"on":""}" data-act="tab" data-id="${id}" data-tab="${t}">${cap(t)}</button>`).join("")}</div>${body}`)},
+notes(){const q=(S.nq||"").toLowerCase();return sec(hd("Notes","Key points and your own notes for every subject."))+`<div class="grid">${SUBJ.map(s=>`<div class="card" data-act="tab" data-id="${s.id}" data-tab="notes"><div class="ch"><div class="ic" style="background:${s.col}">${s.ic}</div><b>${s.n}</b></div><ul class="nl" style="margin:0 0 8px;padding-left:18px">${KB[s.n].n.slice(0,2).map(n=>`<li>${esc(n)}</li>`).join("")}</ul><div class="acts two"><button data-act="tab" data-id="${s.id}" data-tab="notes">Open notes</button><button data-act="tab" data-id="${s.id}" data-tab="notes">+ Add note</button></div></div>`).join("")}</div>`},
+quizzes(){return sec(hd("Quizzes","Pick a subject and test yourself."))+`<div class="grid">${SUBJ.map(s=>{const b=(S.scores[s.id]||{}).quiz;return `<div class="card" data-act="start" data-id="${s.id}" data-mode="quiz"><div class="ch"><div class="ic" style="background:${s.col}">${s.ic}</div><b>${s.n}<small>Best: ${b==null?"–":b+"%"}</small></b></div><div class="acts two"><button data-act="start" data-id="${s.id}" data-mode="quiz">Start quiz</button><button data-act="tab" data-id="${s.id}" data-tab="quizzes">Details</button></div></div>`}).join("")}</div>`},
+assignments(){const subs=SUBJ.filter(s=>AFILT==="all"||getTasks(s.id).some(t=>AFILT==="done"?t.d:!t.d));return sec(hd("Assignments","All your tasks in one place.",chips([["all","All"],["pending","Pending"],["done","Done"]],AFILT,"afilter")))+`<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${subs.map(s=>{const t=getTasks(s.id);return `<div class="card" style="cursor:default"><div class="ch"><div class="ic" style="background:${s.col}">${s.ic}</div><b>${s.n}</b></div>${t.map((x,i)=>({x,i})).filter(o=>AFILT==="all"||(AFILT==="done"?o.x.d:!o.x.d)).map(o=>`<div class="row ${o.x.d?"done":""}"><input type="checkbox" data-act="task" data-id="${s.id}" data-i="${o.i}" ${o.x.d?"checked":""}><span class="tx">${esc(o.x.t)}</span></div>`).join("")}<div class="acts two"><button data-act="tab" data-id="${s.id}" data-tab="tasks">Manage tasks</button><button data-act="tab" data-id="${s.id}" data-tab="notes">Notes</button></div></div>`}).join("")||`<div class="empty">Nothing here.</div>`}</div>`},
+exams(){const subs=SUBJ.filter(s=>s.k!=="extra");return sec(hd("Exams","Exam timetable and mock exams.")+`<div style="overflow-x:auto"><table class="t"><tr><th>Subject</th><th>Date</th><th>Best mock</th><th></th></tr>${subs.map(s=>{const b=(S.scores[s.id]||{}).exam;return `<tr><td>${s.ic} ${s.n}</td><td>${fmtD(examDate(s))}</td><td>${b==null?"–":b+"%"}</td><td style="white-space:nowrap"><button class="b1" data-act="start" data-id="${s.id}" data-mode="exam">Mock exam</button> <button class="b2" data-act="addexam" data-id="${s.id}">+ Calendar</button></td></tr>`}).join("")}</table></div>`)},
+calendar(){const n=new Date();if(!CAL)CAL={y:n.getFullYear(),m:n.getMonth()};const first=new Date(CAL.y,CAL.m,1),dim=new Date(CAL.y,CAL.m+1,0).getDate(),off=(first.getDay()+6)%7,td=iso(n);let cells="";for(let i=0;i<off;i++)cells+=`<button class="blank"></button>`;for(let d=1;d<=dim;d++){const k=iso(new Date(CAL.y,CAL.m,d));cells+=`<button data-act="day" data-d="${k}" class="${k===td?"td":""} ${S.events.some(e=>e.d===k)?"ev":""}">${d}</button>`}
+ const pre=CAL.y+"-"+String(CAL.m+1).padStart(2,"0"),evs=S.events.map((e,i)=>({...e,i})).filter(e=>e.d.startsWith(pre)).sort((a,b)=>a.d<b.d?-1:1);
+ return sec(hd(first.toLocaleDateString("en-GB",{month:"long",year:"numeric"}),"Tap a day to add an event.",`<div class="bt" style="margin:0"><button class="b2" data-act="cprev">‹ Prev</button><button class="b2" data-act="ctoday">Today</button><button class="b2" data-act="cnext">Next ›</button></div>`)+`<div class="cal">${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=>`<div class="hd">${d}</div>`).join("")}${cells}</div>`)+sec(hd("Events this month")+(evs.map(e=>`<div class="row"><span class="tx"><b>${e.d.slice(8)}</b> – ${esc(e.t)}</span><button class="x" data-act="delev" data-i="${e.i}" aria-label="Delete">✕</button></div>`).join("")||`<p style="color:var(--mut)">No events this month.</p>`))},
+progress(){const st=stats();const subs=SUBJ.filter(s=>s.k!=="extra");const sc=Object.entries(S.scores);return `<div class="stats"><div class="st"><b>${st.avg}%</b><small>Average progress</small></div><div class="st"><b>${st.done}/${st.total}</b><small>Tasks completed</small></div><div class="st"><b>${st.qz}</b><small>Subjects quizzed</small></div></div>`+sec(hd("Progress by subject")+subs.map(s=>`<div style="margin-bottom:10px;cursor:pointer" data-act="open" data-id="${s.id}"><div style="display:flex;justify-content:space-between"><span>${s.ic} ${s.n}</span><b>${prog(s)}%</b></div><div class="bar"><i style="width:${prog(s)}%"></i></div></div>`).join(""))+sec(hd("Quiz & exam scores")+(sc.length?`<table class="t"><tr><th>Subject</th><th>Quiz</th><th>Mock exam</th></tr>${sc.map(([id,o])=>`<tr><td>${byId(id).n}</td><td>${o.quiz==null?"–":o.quiz+"%"}</td><td>${o.exam==null?"–":o.exam+"%"}</td></tr>`).join("")}</table>`:`<p style="color:var(--mut)">No scores yet. Take a quiz to see them here.</p>`))},
+messages(){const CT=[["class","Class Teacher","👩‍🏫","Thanks for your message! I'll follow up in class."],["math","Mathematics Teacher","🧮","Good question. Try the practice exercise first, then show me your working."],["lib","Librarian","📚","We have that book. Come by during break."],["group","Study Group","👥","Sounds good! See you at the library."]];const c=CT.find(x=>x[0]===MSG)||CT[0];if(!S.msgs[c[0]])S.msgs[c[0]]=[{m:0,t:"Hello "+S.name+"! How can I help?"}];
+ return sec(hd("Messages")+`<div class="msgw"><div class="ct">${CT.map(x=>`<button class="${x[0]===c[0]?"on":""}" data-act="contact" data-id="${x[0]}"><span class="ic" style="background:var(--soft)">${x[2]}</span>${x[1]}</button>`).join("")}</div><div><div class="th" id="th">${S.msgs[c[0]].map(m=>`<div class="bub ${m.m?"me":""}">${esc(m.t)}</div>`).join("")}</div><div class="inl"><input class="f" id="mi" data-enter="send" placeholder="Message ${c[1]}..."><button class="b1" id="send" data-act="send" data-id="${c[0]}" data-r="${esc(c[3])}">Send</button></div></div></div>`)},
+profile(){const st=stats();return sec(hd("My Profile")+`<div class="ch"><div class="av" style="width:64px;height:64px;font-size:28px">${esc((S.name[0]||"K").toUpperCase())}</div><b style="font-size:18px">${esc(S.name)}<small>Senior 1 Student</small></b></div><label>Name</label><input class="f" id="pn" value="${esc(S.name)}"><label>School</label><input class="f" id="ps" value="${esc(S.school)}" placeholder="Your school"><button class="b1" data-act="saveprof">Save profile</button>`)+`<div class="stats"><div class="st"><b>${st.avg}%</b><small>Average progress</small></div><div class="st"><b>${st.done}</b><small>Tasks done</small></div></div>`},
+settings(){return sec(hd("Settings")+`<div class="sw"><span>Theme</span>${chips([["system","System"],["light","Light"],["dark","Dark"]],S.theme,"themeset")}</div><div class="sw"><span>Show notification badge</span><input type="checkbox" data-act="notifset" ${S.notif?"checked":""} style="width:20px;height:20px"></div><div class="sw"><span>Download my data</span><button class="b2" data-act="export">Export</button></div><div class="sw"><span>Reset all progress and notes</span><button class="b2" data-act="reset">Reset</button></div><div class="sw"><span>Sign out</span><button class="b1" data-act="logout">Log out</button></div>`)},
+search(){const q=(($("q")||{}).value||"").trim().toLowerCase();const r=SUBJ.filter(s=>s.n.toLowerCase().includes(q)||(s.sub||"").toLowerCase().includes(q));const nr=[];SUBJ.forEach(s=>KB[s.n].n.concat(S.mine[s.id]||[]).forEach(n=>{if(n.toLowerCase().includes(q))nr.push([s,n])}));
+ return sec(hd('Results for "'+esc(q)+'"')+(r.length?`<div class="grid">${r.map(card).join("")}</div>`:"")+(nr.length?`<h3>In notes</h3>${nr.slice(0,12).map(([s,n])=>`<div class="row" style="cursor:pointer" data-act="tab" data-id="${s.id}" data-tab="notes"><span class="tx"><b>${s.n}:</b> ${esc(n)}</span></div>`).join("")}`:"")+(!r.length&&!nr.length?`<div class="empty">No subjects or notes match your search.</div>`:""))},
+quizrun(){return runView()}
+};
+function draw(){$("view").innerHTML=(VIEWS[cur[0]]||VIEWS.dashboard)(cur[1],cur[2])}
+function show(v,a,b){if(v!=="quizrun"&&timer){clearInterval(timer);timer=null}cur=[v,a,b];if(v!=="search")prev=cur;const hl=(v==="subject"||v==="quizrun")?"subjects":v;document.querySelectorAll("#nav button").forEach(x=>x.classList.toggle("on",x.dataset.v===hl));$("side").classList.remove("open");draw();window.scrollTo(0,0)}
+
+/* ---------- quiz ---------- */
+const fmtT=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+function startQuiz(id,mode){const kb=KB[byId(id).n];const qs=kb.q.map(x=>{const o=[x[1],x[2],x[3]].sort(()=>Math.random()-.5);return{q:x[0],o,c:o.indexOf(x[1])}}).sort(()=>Math.random()-.5);Q={id,mode,qs,i:0,a:[],sel:null,left:qs.length*30,done:false};clearInterval(timer);timer=null;if(mode==="exam")timer=setInterval(()=>{Q.left--;const t=$("tm");if(t)t.textContent=fmtT(Math.max(0,Q.left));if(Q.left<=0)finish()},1000);show("quizrun")}
+function finish(){if(!Q||Q.done)return;clearInterval(timer);timer=null;Q.done=true;const sc=Q.qs.reduce((n,x,i)=>n+(Q.a[i]===x.c?1:0),0),pct=Math.round(sc/Q.qs.length*100);const o=S.scores[Q.id]||(S.scores[Q.id]={});o[Q.mode]=Math.max(o[Q.mode]||0,pct);S.bonus[Q.id]=(S.bonus[Q.id]||0)+(Q.mode==="exam"?3:2);save();draw()}
+function runView(){if(!Q)return VIEWS.dashboard();const s=byId(Q.id);
+ if(Q.done){const sc=Q.qs.reduce((n,x,i)=>n+(Q.a[i]===x.c?1:0),0),pct=Math.round(sc/Q.qs.length*100);return sec(`<div class="res"><h2>${Q.mode==="exam"?"Mock exam":"Quiz"} complete!</h2><div class="big">${sc}/${Q.qs.length}</div><p>${pct}% – ${pct>=80?"Excellent work! 🌟":pct>=50?"Good effort, keep practising 💪":"Review the notes and try again 📖"}</p><div class="bt" style="justify-content:center"><button class="b1" data-act="start" data-id="${s.id}" data-mode="${Q.mode}">Try again</button><button class="b2" data-act="tab" data-id="${s.id}" data-tab="notes">Review notes</button><button class="b2" data-act="tab" data-id="${s.id}" data-tab="${Q.mode==="exam"?"exams":"quizzes"}">Back to ${s.n}</button></div></div>`)}
+ const q=Q.qs[Q.i],fb=Q.mode==="quiz"&&Q.sel!=null;
+ return `<button class="back" data-act="tab" data-id="${s.id}" data-tab="${Q.mode==="exam"?"exams":"quizzes"}">← Quit</button>`+sec(`<div class="qh"><span>${s.n} – ${Q.mode==="exam"?"Mock exam":"Quiz"} · Question ${Q.i+1}/${Q.qs.length}</span>${Q.mode==="exam"?`<span>⏱ <span id="tm">${fmtT(Math.max(0,Q.left))}</span></span>`:""}</div><h3>${esc(q.q)}</h3>${q.o.map((o,i)=>`<button class="opt ${fb?(i===q.c?"ok":i===Q.sel?"bad":""):(i===Q.sel?"sel":"")}" data-act="ans" data-i="${i}">${esc(o)}</button>`).join("")}${fb?`<p><b>${Q.sel===q.c?"Correct! ✅":"Not quite. The answer is: "+esc(q.o[q.c])}</b></p>`:""}<button class="b1" data-act="next" ${Q.sel==null&&Q.mode==="quiz"?"disabled style='opacity:.5'":""}>${Q.i===Q.qs.length-1?"Finish":"Next"}</button>`)}
+
+/* ---------- actions ---------- */
+function closeMenus(){["nm","pm"].forEach(x=>$(x).classList.remove("open"))}
+function pickMsgReply(){}
+const ACT={
+burger(){$("side").classList.toggle("open")},
+bell(){const o=$("nm").classList.contains("open");closeMenus();if(!o)$("nm").classList.add("open")},
+pmenu(){const o=$("pm").classList.contains("open");closeMenus();if(!o)$("pm").classList.add("open")},
+nav(el){$("q").value="";show(el.dataset.v)},
+open(el){show("subject",el.dataset.id,"notes")},
+tab(el){show("subject",el.dataset.id,el.dataset.tab)},
+start(el){startQuiz(el.dataset.id,el.dataset.mode)},
+ans(el){if(!Q||Q.done)return;if(Q.mode==="quiz"&&Q.sel!=null)return;Q.sel=+el.dataset.i;Q.a[Q.i]=Q.sel;draw()},
+next(){if(!Q)return;if(Q.mode==="quiz"&&Q.sel==null)return;if(Q.i>=Q.qs.length-1)return finish();Q.i++;Q.sel=Q.a[Q.i]==null?null:Q.a[Q.i];draw()},
+filter(el){FILT=el.dataset.f;draw()},afilter(el){AFILT=el.dataset.f;draw()},
+task(el){const t=getTasks(el.dataset.id)[+el.dataset.i];t.d=el.checked?1:0;S.bonus[el.dataset.id]=Math.max(0,(S.bonus[el.dataset.id]||0)+(t.d?1:-1));save();draw();if(t.d)toast("Task completed 🎉")},
+addtask(el){const v=$("ti").value.trim();if(!v)return toast("Type a task first");getTasks(el.dataset.id).push({t:v,d:0});save();draw();toast("Task added")},
+deltask(el){const t=getTasks(el.dataset.id);const x=t.splice(+el.dataset.i,1)[0];if(x&&x.d)S.bonus[el.dataset.id]=Math.max(0,(S.bonus[el.dataset.id]||0)-1);save();draw()},
+addnote(el){const v=$("ni").value.trim();if(!v)return toast("Write something first");(S.mine[el.dataset.id]||(S.mine[el.dataset.id]=[])).push(v);save();draw();toast("Note saved")},
+delnote(el){S.mine[el.dataset.id].splice(+el.dataset.i,1);save();draw()},
+addexam(el){const s=byId(el.dataset.id);const d=iso(examDate(s));if(S.events.some(e=>e.d===d&&e.t===s.n+" exam"))return toast("Already in your calendar");S.events.push({d,t:s.n+" exam"});save();toast("Added to calendar")},
+cprev(){CAL.m--;if(CAL.m<0){CAL.m=11;CAL.y--}draw()},cnext(){CAL.m++;if(CAL.m>11){CAL.m=0;CAL.y++}draw()},ctoday(){CAL=null;draw()},
+day(el){const d=el.dataset.d;ask("Add event on "+d,"Event title",v=>{S.events.push({d,t:v});save();draw();toast("Event added")})},
+delev(el){S.events.splice(+el.dataset.i,1);save();draw()},
+contact(el){MSG=el.dataset.id;draw()},
+send(el){const i=$("mi"),v=i.value.trim();if(!v)return;const id=el.dataset.id,r=el.dataset.r;(S.msgs[id]||(S.msgs[id]=[])).push({m:1,t:v});save();draw();setTimeout(()=>{S.msgs[id].push({m:0,t:r});save();if(cur[0]==="messages"&&MSG===id){draw();const th=$("th");if(th)th.scrollTop=th.scrollHeight}},900);const th=$("th");if(th)th.scrollTop=th.scrollHeight;$("mi").focus()},
+notif(el){const i=+el.dataset.i;S.read[i]=1;save();chrome();show(...NOTIFS[i].go)},
+readall(){S.read=[1,1,1];save();chrome();toast("All notifications marked as read")},
+theme(el){S.theme=effTheme()==="dark"?"light":"dark";save();chrome();if(cur[0]==="settings")draw()},
+themeset(el){S.theme=el.dataset.f;save();chrome();draw()},
+notifset(el){S.notif=el.checked;save();chrome()},
+saveprof(){const n=$("pn").value.trim();if(!n)return toast("Name cannot be empty");S.name=n;S.school=$("ps").value.trim();save();chrome();draw();toast("Profile saved")},
+export(){const b=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="edusphere-data.json";a.click();toast("Data downloaded")},
+reset(){confirmBox("Reset all progress, notes, scores and events?",()=>{S=DEF();CAL=null;Q=null;save();chrome();show("dashboard");toast("Everything has been reset")},"Reset")},
+logout(){confirmBox("Log out of Edusphere?",()=>void logoutClass(),"Log out")},
+login(){const v=$("ln").value.trim();if(v)S.name=v;S.out=false;save();chrome();show("dashboard");toast("Welcome back, "+S.name+"!")},
+mclose(){closeModal()}
+};
+document.addEventListener("click",e=>{const el=e.target.closest("[data-act]");const a=el&&el.dataset.act;if(a!=="bell"&&a!=="pmenu")closeMenus();if(!e.target.closest("#side")&&a!=="burger")$("side").classList.remove("open");if(a&&ACT[a])ACT[a](el,e)});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeModal();closeMenus()}if(e.key==="Enter"&&e.target.dataset&&e.target.dataset.enter){const b=$(e.target.dataset.enter);if(b)b.click()}});
+$("q").addEventListener("input",e=>{if(e.target.value.trim())show("search");else show(...prev)});
+$("ln").addEventListener("keydown",e=>{if(e.key==="Enter")ACT.login()});
+if(!SESSION_USER||!SESSION_USER.id){window.location.replace("/")}else{chrome();loadClassState()}
+</script></body></html>

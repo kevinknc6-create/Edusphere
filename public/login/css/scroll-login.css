@@ -366,3 +366,45 @@
   .esl-track { height: 480vh; height: 480svh; }
   .esl-skip { padding: 0.6rem 0.9rem; }
 }
+
+/* Play the full-screen introduction first, then show the account form over it. */
+.esl[data-auto-intro] {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background:
+    radial-gradient(70% 70% at 50% 35%, rgba(37, 86, 170, 0.38), transparent 75%),
+    #050b1e;
+}
+.esl[data-auto-intro] .esl-track {
+  height: 100vh;
+  height: 100dvh;
+}
+.esl[data-auto-intro] .esl-stage {
+  height: 100vh;
+  height: 100dvh;
+}
+.esl[data-auto-intro] .esl-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.esl[data-auto-intro] .esl-panel {
+  left: 50%;
+  right: auto;
+  top: 50%;
+  bottom: auto;
+  z-index: 5;
+  width: min(28rem, calc(100% - 2rem));
+  min-height: 0;
+  max-height: calc(100% - 2rem);
+  border-radius: 20px;
+  padding-bottom: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.7s ease, visibility 0s linear 0.7s;
+}
+.esl[data-auto-intro] .esl-panel.is-live {
+  transition: opacity 0.7s ease, visibility 0s;
+}

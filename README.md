@@ -16,6 +16,7 @@ Copy-Item .env.example .env
 ```
 
 Set strong values for `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` in `.env`.
+For Google sign-in on the TypeScript API, set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in `.env`. For the documented `npm run dev:all` legacy API, set the same variables in `backend/.env`.
 
 ## Database setup
 
@@ -36,6 +37,7 @@ psql "$env:DATABASE_URL" -f server/db/migrations/006_teacher_verification.sql
 psql "$env:DATABASE_URL" -f server/db/migrations/012_password_reset_codes.sql
 psql "$env:DATABASE_URL" -f server/db/migrations/013_super_admin.sql
 psql "$env:DATABASE_URL" -f server/db/migrations/014_admin_dashboard.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/015_google_auth_identities.sql
 ```
 
 These migrations belong only to the TypeScript server schema. Never run them against the existing legacy `edusphere_db`.
@@ -55,6 +57,7 @@ npm run dev:all
 `npm run dev:all` runs Vite and the legacy API for the existing `edusphere_db`. Keep `backend/.env` configured for that database. The separate TypeScript API can still be run with `npm run dev:server`, but it expects the TypeScript server schema.
 
 The standalone admin dashboard requires `backend/migrations/012_admin_account.sql`, `backend/migrations/013_admin_cms.sql`, and `backend/migrations/014_admin_dashboard.sql` to be applied to the legacy database. The `server/db/migrations/014_admin_dashboard.sql` migration is only for the TypeScript server database and must not be run against `edusphere_db`.
+Google OAuth requires registering `http://localhost:5173/api/auth/google/callback` as an authorized redirect URI in Google Cloud Console (or the exact URL set in `GOOGLE_REDIRECT_URI`). Apply `backend/migrations/016_google_auth_identities.sql` to the legacy database; the TypeScript API uses `server/db/migrations/015_google_auth_identities.sql`. Existing accounts with the same verified Google email are linked to their existing role, including administrator accounts.
 
 ## Production builds
 
@@ -75,6 +78,9 @@ npm run build
 - `POST /api/auth/verify-email`
 - `POST /api/auth/forgot-password`
 - `POST /api/auth/reset-password`
+- `GET /api/auth/google/start`
+- `GET /api/auth/google/callback`
+- `POST /api/auth/google/complete`
 
 ### Learning
 
