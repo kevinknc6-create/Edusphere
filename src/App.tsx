@@ -31,6 +31,13 @@ function classDashboardPath(profile: EducationProfile | null) {
     const grade = profile.grade_name?.match(/(?:senior|secondary|s)?\s*([1-3])\s*$/i)?.[1]
     return grade ? `/classe/s${grade}.html` : null
 }
+function hasCompleteEducationProfile(profile: EducationProfile | null) {
+    if (!profile?.education_level_id) return false
+    const level = (profile.education_level_name || '').toLowerCase()
+    if (level.includes('university') || level.includes('higher')) return Boolean(profile.program_id)
+    if (level.includes('tvet') || level.includes('sod') || /\bl[345]\b/.test(level)) return Boolean(profile.grade_id && profile.program_id)
+    return Boolean(profile.grade_id)
+}
 const courses: Course[] = []
 const subjects = ['All subjects']
 const educationLevels = ['Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6', 'Secondary 1', 'Secondary 2', 'Secondary 3', 'Secondary 4', 'Secondary 5', 'Secondary 6', 'L3', 'L4', 'L5', 'Computer Science', 'Software Engineering', 'Information Technology', 'Networking', 'Cybersecurity', 'Artificial Intelligence', 'Data Science', 'Business', 'Economics', 'Accounting', 'Finance', 'Law', 'Education', 'Engineering', 'Medicine', 'Nursing', 'Agriculture', 'Architecture', 'Mathematics', 'Physics', 'Chemistry', 'Biology']
@@ -70,6 +77,9 @@ function App() {
     const [teacherTab, setTeacherTab] = useState('Overview')
     const [isBooting, setIsBooting] = useState(true)
     const [showEducationOnboarding, setShowEducationOnboarding] = useState(false)
+    const [educationProfileLoading, setEducationProfileLoading] = useState(() => localStorage.getItem('edusphere-auth') === 'true' && Boolean(getAccessToken()) && getStoredUser()?.role === 'student')
+    const [educationProfileError, setEducationProfileError] = useState('')
+    const [educationProfileLoadAttempt, setEducationProfileLoadAttempt] = useState(0)
     const [teacherLogin, setTeacherLogin] = useState(false)
 
     function clearSessionData() {
@@ -88,6 +98,9 @@ function App() {
 
     function acceptSession(session: ApiSession) {
         clearSessionData()
+        setEducationProfileLoading(session.user.role === 'student')
+        setEducationProfileError('')
+        setShowEducationOnboarding(false)
         setCurrentUser(session.user)
         setView(session.user.role === 'teacher' ? 'teacher' : 'dashboard')
         setIsAuthenticated(true)
@@ -104,16 +117,26 @@ function App() {
     useEffect(() => { document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'; localStorage.setItem('edusphere-theme', darkMode ? 'dark' : 'light') }, [darkMode])
     useEffect(() => { if (isAuthenticated) localStorage.setItem('edusphere-auth', 'true'); else localStorage.removeItem('edusphere-auth') }, [isAuthenticated])
     useEffect(() => {
-        if (!isAuthenticated || currentUser?.role !== 'student') { setEducationProfile(null); return }
-        api.educationProfile().then((result) => {
-            setEducationProfile(result.data)
-        }).catch(() => setEducationProfile(null))
-    }, [isAuthenticated, currentUser?.id, currentUser?.role])
-    useEffect(() => {
         if (!isAuthenticated || currentUser?.role !== 'student') return
+        let cancelled = false
+        api.educationProfile().then((result) => {
+            if (cancelled) return
+            setEducationProfile(result.data)
+            setShowEducationOnboarding(!hasCompleteEducationProfile(result.data))
+        }).catch((error: unknown) => {
+            if (cancelled) return
+            setEducationProfile(null)
+            setEducationProfileError(error instanceof Error ? error.message : 'Your class could not be loaded.')
+        }).finally(() => {
+            if (!cancelled) setEducationProfileLoading(false)
+        })
+        return () => { cancelled = true }
+    }, [isAuthenticated, currentUser?.id, currentUser?.role, educationProfileLoadAttempt])
+    useEffect(() => {
+        if (!isAuthenticated || currentUser?.role !== 'student' || educationProfileLoading || educationProfileError) return
         const path = classDashboardPath(educationProfile)
         if (path && window.location.pathname !== path) window.location.replace(path)
-    }, [isAuthenticated, currentUser?.role, educationProfile])
+    }, [isAuthenticated, currentUser?.role, educationProfile, educationProfileLoading, educationProfileError])
     useEffect(() => {
         if (!isAuthenticated || currentUser?.role !== 'student') return
         api.learningSummary().then((result) => setLearningSummary(result.data)).catch(() => setLearningSummary(null))
@@ -156,10 +179,18 @@ function App() {
             localStorage.removeItem('edusphere-education-program')
         } catch { /* Keep the current learning path when reset fails. */ }
     }
+    async function completeEducationOnboarding() {
+        const result = await api.educationProfile()
+        if (!hasCompleteEducationProfile(result.data)) throw new Error('Your selected class could not be verified. Please try again.')
+        setEducationProfile(result.data)
+        setShowEducationOnboarding(false)
+    }
 
     if (!isAuthenticated) return teacherLogin ? <TeacherLoginScreen onBack={() => setTeacherLogin(false)} onSuccess={(session) => { acceptSession(session); setTeacherLogin(false) }} /> : <HtmlLoginScreen onTeacherLogin={() => setTeacherLogin(true)} onSuccess={acceptSession} />
     if (isBooting) return <LoadingScreen />
-    if (showEducationOnboarding) return <EducationOnboarding onComplete={() => { api.educationProfile().then((result) => setEducationProfile(result.data)).catch(() => undefined); setShowEducationOnboarding(false) }} />
+    if (currentUser?.role === 'student' && educationProfileLoading) return <LoadingScreen />
+    if (currentUser?.role === 'student' && educationProfileError) return <main className="education-onboarding"><div className="education-onboarding-glow" /><section className="education-onboarding-content"><div className="education-intro"><h1>Your class could not be loaded.</h1><p role="alert">{educationProfileError}</p><button className="education-continue" onClick={() => { setEducationProfileError(''); setEducationProfileLoading(true); setEducationProfileLoadAttempt((attempt) => attempt + 1) }}>Try again</button></div></section></main>
+    if (showEducationOnboarding) return <EducationOnboarding onComplete={completeEducationOnboarding} />
 
     const filteredCourses = availableCourses.filter((course) => {
         const matchesQuery = `${course.title} ${course.category} ${course.teacher}`.toLowerCase().includes(query.toLowerCase())

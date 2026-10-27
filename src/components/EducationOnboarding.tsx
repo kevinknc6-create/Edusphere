@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, BookOpen, Check, GraduationCap, LoaderCircle, School, Sparkles } from 'lucide-react'
 import { api, type EducationTaxonomy } from '../lib/api'
 
-type EducationOnboardingProps = { onComplete: () => void }
+type EducationOnboardingProps = { onComplete: () => Promise<void> }
 type Category = 'primary' | 'secondary' | 'tvet' | 'university'
 
 const categories: Array<{ id: Category; label: string; description: string; icon: typeof School }> = [
@@ -72,7 +72,7 @@ export default function EducationOnboarding({ onComplete }: EducationOnboardingP
             localStorage.setItem('edusphere-education-grade', grades.find((grade) => grade.id === gradeId)?.name || '')
             localStorage.setItem('edusphere-education-program', programs.find((program) => program.id === programId)?.name || '')
             localStorage.setItem('edusphere-education-profile-complete', 'true')
-            onComplete()
+            await onComplete()
         } catch (caught) {
             setError(caught instanceof Error ? caught.message : 'Your education profile could not be saved.')
         } finally {
