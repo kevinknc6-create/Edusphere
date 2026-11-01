@@ -14,7 +14,7 @@ const chatInput = z.object({
     courseId: z.string().uuid().optional(),
     lessonId: z.string().uuid().optional(),
     educationLevel: z.string().trim().max(120).optional(),
-    language: z.string().trim().max(40).default('English'),
+    language: z.string().trim().max(40).optional(),
 })
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -52,16 +52,25 @@ async function buildContext(input: z.infer<typeof chatInput>, userId: string, ro
 }
 
 async function askProvider(messages: ChatMessage[]) {
-    if (!env.AI_API_KEY) throw new HttpError(503, 'Edusphere AI is temporarily unavailable. Please try again.')
-    const response = await fetch(env.AI_API_URL, {
+    if (!env.GEMINI_API_KEY) throw new HttpError(503, 'Edusphere AI is temporarily unavailable. Please try again.')
+    const systemInstruction = messages.filter((message) => message.role === 'system').map((message) => message.content).join('\n\n')
+    const contents = messages.filter((message) => message.role !== 'system').map((message) => ({
+        role: message.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: message.content }],
+    }))
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.GEMINI_MODEL)}:generateContent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.AI_API_KEY}` },
-        body: JSON.stringify({ model: env.AI_MODEL, messages, temperature: 0.3 }),
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+        body: JSON.stringify({
+            ...(systemInstruction ? { systemInstruction: { parts: [{ text: systemInstruction }] } } : {}),
+            contents,
+            generationConfig: { temperature: 0.3 },
+        }),
         signal: AbortSignal.timeout(30_000),
     }).catch(() => null)
     if (!response || !response.ok) throw new HttpError(503, 'Edusphere AI is temporarily unavailable. Please try again.')
-    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> }
-    const answer = payload.choices?.[0]?.message?.content?.trim()
+    const payload = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+    const answer = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('').trim()
     if (!answer) throw new HttpError(503, 'Edusphere AI returned an empty response. Please try again.')
     return answer
 }
@@ -86,7 +95,8 @@ router.post('/chat', asyncHandler(async (request, response) => {
     }
     const history = await pool.query(`SELECT role, content FROM ai_messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 12`, [conversationId])
     const level = request.auth!.role === 'student' ? learnerContext.educationLevel : input.educationLevel || learnerContext.educationLevel
-    const system = `You are Edusphere AI, a patient learning assistant for ${level}. Explain clearly, check understanding, and adapt examples to the learner. Do not invent course facts. When published lesson content is provided, prioritize that content and distinguish it from general knowledge. Reply in ${input.language}. ${learnerContext.context ? `Use this learning context:\n${learnerContext.context}` : ''}`
+    const language = input.language || 'the same language as the learner\'s latest question'
+    const system = `You are Edusphere AI, a patient learning assistant for ${level}. Reply in ${language}, or in the same language as the learner's latest message when no language was requested. For a simple greeting such as "Hi", greet them back briefly in that language; do not turn greetings into lessons. Answer the exact question asked, explain clearly, and adapt examples to the learner. Do not invent course facts. When published lesson content is provided, prioritize that content and distinguish it from general knowledge. ${learnerContext.context ? `Use this learning context:\n${learnerContext.context}` : ''}`
     const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history.rows.reverse().map((item) => ({ role: item.role as 'user' | 'assistant', content: item.content as string })), { role: 'user', content: input.message }]
     const answer = await askProvider(messages)
     await pool.query('INSERT INTO ai_messages (conversation_id, role, content) VALUES ($1, $2, $3), ($1, $4, $5)', [conversationId, 'user', input.message, 'assistant', answer])

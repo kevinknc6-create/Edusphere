@@ -1,4 +1,4 @@
-async function askGemini(messages) {
+async function askProvider(messages) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("AI_NOT_CONFIGURED");
     const model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
@@ -33,29 +33,6 @@ async function askGemini(messages) {
         .trim();
     if (!answer) throw new Error("AI_EMPTY_RESPONSE");
     return answer;
-}
-
-async function askOpenAi(messages) {
-    const apiKey = process.env.OPENAI_API_KEY || process.env.AI_API_KEY;
-    if (!apiKey) throw new Error("AI_NOT_CONFIGURED");
-    const response = await fetch(process.env.AI_API_URL || "https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: process.env.OPENAI_MODEL || process.env.AI_MODEL || "gpt-4o-mini", messages }),
-        signal: AbortSignal.timeout(30000),
-    });
-    if (!response.ok) throw new Error(`AI_PROVIDER_FAILED_${response.status}`);
-    const payload = await response.json();
-    const answer = payload.choices?.[0]?.message?.content;
-    if (typeof answer !== "string" || !answer.trim()) throw new Error("AI_EMPTY_RESPONSE");
-    return answer.trim();
-}
-
-async function askProvider(messages) {
-    const provider = (process.env.AI_PROVIDER || "openai").toLowerCase();
-    if (provider === "gemini" || provider === "google") return askGemini(messages);
-    if (provider === "openai") return askOpenAi(messages);
-    throw new Error("AI_PROVIDER_NOT_SUPPORTED");
 }
 
 module.exports = { askProvider };

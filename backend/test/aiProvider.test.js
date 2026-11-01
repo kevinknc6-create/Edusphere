@@ -27,9 +27,10 @@ test("sends Gemini requests to the configured model with server-side key and sys
     };
     try {
         const answer = await withEnvironment({
-            AI_PROVIDER: "gemini",
+            AI_PROVIDER: "openai",
             GEMINI_API_KEY: "test-gemini-secret",
             GEMINI_MODEL: "gemini-3.5-flash-lite",
+            OPENAI_API_KEY: "test-openai-secret",
         }, () => askProvider([
             { role: "system", content: "Be helpful." },
             { role: "user", content: "Muraho" },
@@ -62,11 +63,12 @@ test("reports provider HTTP errors without requiring provider response details",
     }
 });
 
-test("does not fall back to OpenAI when Gemini is selected without a Gemini key", async () => {
+test("requires Gemini credentials even when OpenAI credentials are present", async () => {
     await withEnvironment({
-        AI_PROVIDER: "gemini",
+        AI_PROVIDER: "openai",
         GEMINI_API_KEY: undefined,
         OPENAI_API_KEY: "test-openai-secret",
+        AI_API_KEY: "test-legacy-openai-secret",
     }, async () => {
         await assert.rejects(askProvider([{ role: "user", content: "Hi" }]), /AI_NOT_CONFIGURED/);
     });

@@ -12,9 +12,8 @@ const envSchema = z.object({
     GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
     GOOGLE_REDIRECT_URI: z.string().url().optional(),
     COOKIE_SAME_SITE: z.enum(['strict', 'lax', 'none']).default('lax'),
-    AI_API_KEY: z.string().min(1).optional(),
-    AI_API_URL: z.string().url().default('https://api.openai.com/v1/chat/completions'),
-    AI_MODEL: z.string().min(1).default('gpt-4o-mini'),
+    GEMINI_API_KEY: z.string().min(1).optional(),
+    GEMINI_MODEL: z.string().min(1).default('gemini-3.5-flash-lite'),
     RESEND_API_KEY: z.string().min(1).optional(),
     MAIL_FROM: z.string().email().default('EduSphere <onboarding@resend.dev>'),
 })
