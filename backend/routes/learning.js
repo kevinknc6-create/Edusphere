@@ -25,15 +25,24 @@ function isAdmin(req) { return ["admin", "super-admin"].includes(req.auth.role);
 async function canEditCourse(courseId, req) {
     if (isAdmin(req)) return true;
     if (req.auth.role !== "teacher") return false;
-    const result = await pool.query("SELECT 1 FROM library_courses WHERE id = $1 AND teacher_id = $2", [courseId, req.auth.userId]);
+    const result = await pool.query(`SELECT 1 FROM library_courses course
+        JOIN users teacher ON teacher.id = $2 AND teacher.role = 'teacher'
+        JOIN teacher_subject_assignments assignment
+            ON assignment.teacher_id = teacher.id
+            AND assignment.school_id = teacher.school_id
+            AND assignment.grade_id = course.grade_id
+            AND assignment.program_id IS NOT DISTINCT FROM course.program_id
+            AND assignment.subject_id = course.subject_id
+        WHERE course.id = $1 AND course.teacher_id = teacher.id
+            AND (course.school_id IS NULL OR course.school_id = assignment.school_id)`, [courseId, req.auth.userId]);
     return Boolean(result.rows[0]);
 }
 
 async function canEditLesson(lessonId, req) {
     if (isAdmin(req)) return true;
     if (req.auth.role !== "teacher") return false;
-    const result = await pool.query("SELECT 1 FROM course_lessons l JOIN course_modules m ON m.id = l.module_id JOIN library_courses c ON c.id = m.course_id WHERE l.id = $1 AND c.teacher_id = $2", [lessonId, req.auth.userId]);
-    return Boolean(result.rows[0]);
+    const result = await pool.query("SELECT c.id FROM course_lessons l JOIN course_modules m ON m.id = l.module_id JOIN library_courses c ON c.id = m.course_id WHERE l.id = $1", [lessonId]);
+    return Boolean(result.rows[0] && await canEditCourse(result.rows[0].id, req));
 }
 
 function integer(value) {
@@ -46,7 +55,9 @@ function text(value, fallback = "") {
 }
 
 async function studentProfile(userId) {
-    const result = await pool.query("SELECT education_level_id, grade_id, program_id FROM users WHERE id = $1 AND role = 'student'", [userId]);
+    const result = await pool.query(`SELECT student.education_level_id, student.grade_id, student.program_id, student.school_id,
+            EXISTS (SELECT 1 FROM admin_schools school WHERE school.id = student.school_id AND school.status = 'active') AS school_active
+        FROM users student WHERE student.id = $1 AND student.role = 'student' AND student.status = 'active'`, [userId]);
     return result.rows[0] || null;
 }
 
@@ -69,6 +80,23 @@ router.get("/taxonomy", async (_req, res) => {
 
 router.use(requireAuth);
 
+router.get("/schools", async (req, res) => {
+    if (req.auth.role !== "student") return res.status(403).json({ message: "Student access required" });
+    try {
+        const result = await pool.query(`SELECT id, name FROM admin_schools
+            WHERE status = 'active'
+              AND EXISTS (
+                  SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'school_id'
+              )
+            ORDER BY name`);
+        return res.json({ data: result.rows });
+    } catch (error) {
+        console.error("LEARNING SCHOOLS ERROR:", error.message);
+        return res.status(500).json({ message: "School options could not be loaded." });
+    }
+});
+
 router.get("/courses", async (req, res) => {
     const search = text(req.query.search);
     let level = integer(req.query.level);
@@ -77,7 +105,7 @@ router.get("/courses", async (req, res) => {
     const subject = integer(req.query.subject);
     try {
         const student = req.auth.role === "student" ? await studentProfile(req.auth.userId) : null;
-        if (req.auth.role === "student" && (!student || !student.education_level_id || !student.grade_id)) return res.json({ data: [] });
+        if (req.auth.role === "student" && (!student || !student.education_level_id || !student.grade_id || !student.school_active)) return res.json({ data: [] });
         if (student) { level = student.education_level_id; grade = student.grade_id; program = student.program_id; }
         const result = await pool.query(`
       SELECT c.id, c.title, c.description, c.difficulty, c.status, c.education_level_id, c.grade_id, c.program_id,
@@ -94,9 +122,9 @@ router.get("/courses", async (req, res) => {
         AND ($4::bigint IS NULL OR c.grade_id = $4)
         AND ($5::bigint IS NULL OR c.program_id = $5)
         AND ($6::bigint IS NULL OR c.subject_id = $6)
-                AND (NOT $7::boolean OR (c.education_level_id = $8 AND c.grade_id IS NOT DISTINCT FROM $9::bigint AND c.program_id IS NOT DISTINCT FROM $10::bigint))
+                AND (NOT $7::boolean OR (c.education_level_id = $8 AND c.grade_id IS NOT DISTINCT FROM $9::bigint AND c.program_id IS NOT DISTINCT FROM $10::bigint AND (c.school_id IS NULL OR c.school_id = $11)))
             GROUP BY c.id, s.name, u.name
-        ORDER BY c.updated_at DESC, c.title`, [search, `%${search}%`, level, grade, program, subject, Boolean(student), student?.education_level_id || null, student?.grade_id || null, student?.program_id || null]);
+        ORDER BY c.updated_at DESC, c.title`, [search, `%${search}%`, level, grade, program, subject, Boolean(student), student?.education_level_id || null, student?.grade_id || null, student?.program_id || null, student?.school_id || null]);
         res.json({ data: result.rows });
     } catch (error) {
         console.error("COURSE LIST ERROR:", error.message);
@@ -109,7 +137,7 @@ router.get("/search", async (req, res) => {
     if (query.length < 2) return res.status(400).json({ message: "Search must contain at least two characters." });
     try {
         const pattern = `%${query}%`;
-        const studentScope = req.auth.role === "student" ? "AND EXISTS (SELECT 1 FROM users p WHERE p.id = $2 AND c.education_level_id = p.education_level_id AND c.grade_id IS NOT DISTINCT FROM p.grade_id AND c.program_id IS NOT DISTINCT FROM p.program_id)" : "";
+        const studentScope = req.auth.role === "student" ? "AND EXISTS (SELECT 1 FROM users p JOIN admin_schools school ON school.id = p.school_id AND school.status = 'active' WHERE p.id = $2 AND p.status = 'active' AND c.education_level_id = p.education_level_id AND c.grade_id IS NOT DISTINCT FROM p.grade_id AND c.program_id IS NOT DISTINCT FROM p.program_id AND (c.school_id IS NULL OR c.school_id = p.school_id))" : "";
         const result = await pool.query(`
       SELECT 'course' AS result_type, c.id, c.title, c.description, s.name AS subject, NULL::bigint AS lesson_id
       FROM library_courses c JOIN library_subjects s ON s.id = c.subject_id
@@ -144,9 +172,9 @@ router.get("/courses/:id", async (req, res) => {
     if (!courseId) return res.status(400).json({ message: "Invalid course id" });
     try {
         const student = req.auth.role === "student" ? await studentProfile(req.auth.userId) : null;
-        if (req.auth.role === "student" && (!student || !student.education_level_id || !student.grade_id)) return res.status(404).json({ message: "Course not found" });
-        const scope = student ? "AND c.education_level_id = $2 AND c.grade_id IS NOT DISTINCT FROM $3::bigint AND c.program_id IS NOT DISTINCT FROM $4::bigint" : "";
-        const params = student ? [courseId, student.education_level_id, student.grade_id, student.program_id] : [courseId];
+        if (req.auth.role === "student" && (!student || !student.education_level_id || !student.grade_id || !student.school_active)) return res.status(404).json({ message: "Course not found" });
+        const scope = student ? "AND c.education_level_id = $2 AND c.grade_id IS NOT DISTINCT FROM $3::bigint AND c.program_id IS NOT DISTINCT FROM $4::bigint AND (c.school_id IS NULL OR c.school_id = $5)" : "";
+        const params = student ? [courseId, student.education_level_id, student.grade_id, student.program_id, student.school_id] : [courseId];
         const course = await pool.query(`SELECT c.*, s.name AS subject, u.name AS teacher FROM library_courses c JOIN library_subjects s ON s.id = c.subject_id LEFT JOIN users u ON u.id = c.teacher_id WHERE c.id = $1 AND c.status = 'published' ${scope}`, params);
         if (!course.rows[0]) return res.status(404).json({ message: "Course not found" });
         const modules = await pool.query(`SELECT m.id, m.title, m.position, COALESCE(json_agg(json_build_object('id', l.id, 'title', l.title, 'explanation', l.explanation, 'keyPoints', l.key_points, 'definitions', l.definitions, 'summary', l.summary, 'position', l.position, 'notes', (SELECT COALESCE(json_agg(n ORDER BY n.position), '[]') FROM lesson_notes n WHERE n.lesson_id = l.id AND n.status = 'published'), 'examples', (SELECT COALESCE(json_agg(e ORDER BY e.position), '[]') FROM lesson_examples e WHERE e.lesson_id = l.id AND e.status = 'published'), 'exercises', (SELECT COALESCE(json_agg(x ORDER BY x.position), '[]') FROM lesson_exercises x WHERE x.lesson_id = l.id AND x.status = 'published')) ORDER BY l.position) FILTER (WHERE l.id IS NOT NULL), '[]') AS lessons FROM course_modules m LEFT JOIN course_lessons l ON l.module_id = m.id AND l.status = 'published' WHERE m.course_id = $1 AND m.status = 'published' GROUP BY m.id ORDER BY m.position`, [courseId]);
@@ -159,7 +187,7 @@ router.get("/courses/:id", async (req, res) => {
 
 router.get("/me/progress", async (req, res) => {
     try {
-        const result = await pool.query(`SELECT c.id AS course_id, c.title, COUNT(l.id)::int AS total_lessons, COUNT(lp.lesson_id) FILTER (WHERE lp.completed_at IS NOT NULL)::int AS completed_lessons, COALESCE(ROUND(COUNT(lp.lesson_id) FILTER (WHERE lp.completed_at IS NOT NULL) * 100.0 / NULLIF(COUNT(l.id), 0)), 0)::int AS progress FROM library_enrollments e JOIN users p ON p.id = e.student_id JOIN library_courses c ON c.id = e.course_id AND c.education_level_id = p.education_level_id AND c.grade_id IS NOT DISTINCT FROM p.grade_id AND c.program_id IS NOT DISTINCT FROM p.program_id LEFT JOIN course_modules m ON m.course_id = c.id AND m.status = 'published' LEFT JOIN course_lessons l ON l.module_id = m.id AND l.status = 'published' LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.student_id = $1 WHERE e.student_id = $1 AND c.status = 'published' GROUP BY c.id, c.title ORDER BY MAX(lp.completed_at) DESC NULLS LAST`, [req.auth.userId]);
+        const result = await pool.query(`SELECT c.id AS course_id, c.title, COUNT(l.id)::int AS total_lessons, COUNT(lp.lesson_id) FILTER (WHERE lp.completed_at IS NOT NULL)::int AS completed_lessons, COALESCE(ROUND(COUNT(lp.lesson_id) FILTER (WHERE lp.completed_at IS NOT NULL) * 100.0 / NULLIF(COUNT(l.id), 0)), 0)::int AS progress FROM library_enrollments e JOIN users p ON p.id = e.student_id AND p.status = 'active' JOIN admin_schools school ON school.id = p.school_id AND school.status = 'active' JOIN library_courses c ON c.id = e.course_id AND c.education_level_id = p.education_level_id AND c.grade_id IS NOT DISTINCT FROM p.grade_id AND c.program_id IS NOT DISTINCT FROM p.program_id AND (c.school_id IS NULL OR c.school_id = p.school_id) LEFT JOIN course_modules m ON m.course_id = c.id AND m.status = 'published' LEFT JOIN course_lessons l ON l.module_id = m.id AND l.status = 'published' LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.student_id = $1 WHERE e.student_id = $1 AND c.status = 'published' GROUP BY c.id, c.title ORDER BY MAX(lp.completed_at) DESC NULLS LAST`, [req.auth.userId]);
         res.json({ data: result.rows });
     } catch (error) {
         console.error("PROGRESS ERROR:", error.message);
@@ -173,7 +201,8 @@ router.post("/courses/:id/enroll", async (req, res) => {
     if (req.auth.role !== "student") return res.status(403).json({ message: "Student access required" });
     const profile = await studentProfile(req.auth.userId);
     if (!profile || !profile.education_level_id || !profile.grade_id) return res.status(404).json({ message: "Published course not found" });
-    const eligible = await pool.query("SELECT 1 FROM library_courses WHERE id = $1 AND status = 'published' AND education_level_id = $2 AND grade_id IS NOT DISTINCT FROM $3::bigint AND program_id IS NOT DISTINCT FROM $4::bigint", [courseId, profile.education_level_id, profile.grade_id, profile.program_id]);
+    if (!profile.school_active) return res.status(404).json({ message: "Published course not found" });
+    const eligible = await pool.query("SELECT 1 FROM library_courses WHERE id = $1 AND status = 'published' AND education_level_id = $2 AND grade_id IS NOT DISTINCT FROM $3::bigint AND program_id IS NOT DISTINCT FROM $4::bigint AND (school_id IS NULL OR school_id = $5)", [courseId, profile.education_level_id, profile.grade_id, profile.program_id, profile.school_id]);
     if (!eligible.rows[0]) return res.status(404).json({ message: "Published course not found" });
     await pool.query("INSERT INTO library_enrollments (student_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [req.auth.userId, courseId]);
     res.status(201).json({ message: "Enrolled" });
@@ -184,7 +213,7 @@ router.post("/lessons/:id/progress", async (req, res) => {
     const secondsSpent = Number(req.body.secondsSpent || 0);
     if (!lessonId || !Number.isInteger(secondsSpent) || secondsSpent < 0 || secondsSpent > 86400) return res.status(400).json({ message: "Invalid lesson progress" });
     if (req.auth.role !== "student") return res.status(403).json({ message: "Student access required" });
-    const lesson = await pool.query("SELECT m.course_id FROM course_lessons l JOIN course_modules m ON m.id = l.module_id JOIN library_courses c ON c.id = m.course_id JOIN users p ON p.id = $2 WHERE l.id = $1 AND l.status = 'published' AND m.status = 'published' AND c.status = 'published' AND c.education_level_id = p.education_level_id AND c.grade_id IS NOT DISTINCT FROM p.grade_id AND c.program_id IS NOT DISTINCT FROM p.program_id", [lessonId, req.auth.userId]);
+    const lesson = await pool.query("SELECT m.course_id FROM course_lessons l JOIN course_modules m ON m.id = l.module_id JOIN library_courses c ON c.id = m.course_id JOIN users p ON p.id = $2 AND p.status = 'active' JOIN admin_schools school ON school.id = p.school_id AND school.status = 'active' WHERE l.id = $1 AND l.status = 'published' AND m.status = 'published' AND c.status = 'published' AND c.education_level_id = p.education_level_id AND c.grade_id IS NOT DISTINCT FROM p.grade_id AND c.program_id IS NOT DISTINCT FROM p.program_id AND (c.school_id IS NULL OR c.school_id = p.school_id)", [lessonId, req.auth.userId]);
     if (!lesson.rows[0]) return res.status(404).json({ message: "Published lesson not found" });
     await pool.query(`INSERT INTO lesson_progress (student_id, course_id, lesson_id, completed_at, seconds_spent) VALUES ($1, $2, $3, CASE WHEN $4 THEN now() ELSE NULL END, $5) ON CONFLICT (student_id, lesson_id) DO UPDATE SET completed_at = EXCLUDED.completed_at, seconds_spent = lesson_progress.seconds_spent + EXCLUDED.seconds_spent`, [req.auth.userId, lesson.rows[0].course_id, lessonId, Boolean(req.body.completed), secondsSpent]);
     await pool.query("INSERT INTO recently_viewed_lessons (student_id, lesson_id) VALUES ($1, $2) ON CONFLICT (student_id, lesson_id) DO UPDATE SET viewed_at = now()", [req.auth.userId, lessonId]);
@@ -194,12 +223,25 @@ router.post("/lessons/:id/progress", async (req, res) => {
 router.put("/lessons/:id/bookmark", async (req, res) => {
     const lessonId = integer(req.params.id);
     if (!lessonId) return res.status(400).json({ message: "Invalid lesson id" });
+    if (req.auth.role !== "student") return res.status(403).json({ message: "Student access required" });
+    const eligible = await pool.query(`SELECT 1 FROM course_lessons lesson
+        JOIN course_modules module ON module.id = lesson.module_id AND module.status = 'published'
+        JOIN library_courses course ON course.id = module.course_id AND course.status = 'published'
+        JOIN users student ON student.id = $2 AND student.role = 'student' AND student.status = 'active'
+            AND student.education_level_id = course.education_level_id
+            AND student.grade_id IS NOT DISTINCT FROM course.grade_id
+            AND student.program_id IS NOT DISTINCT FROM course.program_id
+            AND (course.school_id IS NULL OR course.school_id = student.school_id)
+        JOIN admin_schools school ON school.id = student.school_id AND school.status = 'active'
+        WHERE lesson.id = $1 AND lesson.status = 'published'`, [lessonId, req.auth.userId]);
+    if (!eligible.rows[0]) return res.status(404).json({ message: "Published lesson not found" });
     if (req.body.bookmarked === false) await pool.query("DELETE FROM library_bookmarks WHERE student_id = $1 AND lesson_id = $2", [req.auth.userId, lessonId]);
     else await pool.query("INSERT INTO library_bookmarks (student_id, lesson_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [req.auth.userId, lessonId]);
     res.status(204).send();
 });
 
 router.post("/admin/subjects", requireRole("teacher", "admin", "super-admin"), async (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ message: "Only administrators can create curriculum subjects" });
     const name = text(req.body.name);
     if (!name) return res.status(400).json({ message: "Subject name is required" });
     const result = await pool.query("INSERT INTO library_subjects (name, description, education_level_id, grade_id, program_id, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *", [name, text(req.body.description), integer(req.body.educationLevelId), integer(req.body.gradeId), integer(req.body.programId), req.auth.userId]);
@@ -209,8 +251,29 @@ router.post("/admin/subjects", requireRole("teacher", "admin", "super-admin"), a
 router.post("/admin/courses", requireRole("teacher", "admin", "super-admin"), async (req, res) => {
     const title = text(req.body.title);
     const subjectId = integer(req.body.subjectId);
-    if (!title || !subjectId) return res.status(400).json({ message: "Course title and subject are required" });
-    const result = await pool.query("INSERT INTO library_courses (subject_id, program_id, education_level_id, grade_id, teacher_id, title, description, difficulty, learning_objectives, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft') RETURNING *", [subjectId, integer(req.body.programId), integer(req.body.educationLevelId), integer(req.body.gradeId), req.auth.userId, title, text(req.body.description), text(req.body.difficulty, "Beginner"), JSON.stringify(Array.isArray(req.body.learningObjectives) ? req.body.learningObjectives : [])]);
+    const programId = integer(req.body.programId);
+    const educationLevelId = integer(req.body.educationLevelId);
+    const gradeId = integer(req.body.gradeId);
+    const hasProgram = req.body.programId !== undefined && req.body.programId !== null && req.body.programId !== "";
+    const hasSchool = req.body.schoolId !== undefined && req.body.schoolId !== null && req.body.schoolId !== "";
+    if (!title || !subjectId || hasProgram && !programId || !educationLevelId || !gradeId) return res.status(400).json({ message: "Course title, subject, education level, and class are required and must be valid" });
+    let schoolId = integer(req.body.schoolId);
+    if (hasSchool && !schoolId) return res.status(400).json({ message: "School must be a valid active school" });
+    if (req.auth.role === "teacher") {
+        const assignment = await pool.query(`SELECT assignment.school_id FROM teacher_subject_assignments assignment
+            JOIN users teacher ON teacher.id = assignment.teacher_id AND teacher.school_id = assignment.school_id
+            JOIN grades grade ON grade.id = assignment.grade_id AND grade.education_level_id = $4
+            JOIN library_subjects subject ON subject.id = assignment.subject_id AND subject.education_level_id = $4
+            WHERE assignment.teacher_id = $1 AND assignment.grade_id = $2
+                AND assignment.program_id IS NOT DISTINCT FROM $3::bigint AND assignment.subject_id = $5
+                AND teacher.status = 'active'`, [req.auth.userId, gradeId, programId, educationLevelId, subjectId]);
+        if (!assignment.rows[0]) return res.status(403).json({ message: "You are not assigned to teach this school, class, program, and subject" });
+        schoolId = Number(assignment.rows[0].school_id);
+    } else if (schoolId) {
+        const school = await pool.query("SELECT id FROM admin_schools WHERE id = $1 AND status = 'active'", [schoolId]);
+        if (!school.rows[0]) return res.status(400).json({ message: "Choose an active school" });
+    }
+    const result = await pool.query("INSERT INTO library_courses (school_id, subject_id, program_id, education_level_id, grade_id, teacher_id, title, description, difficulty, learning_objectives, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'draft') RETURNING *", [schoolId, subjectId, programId, educationLevelId, gradeId, req.auth.userId, title, text(req.body.description), text(req.body.difficulty, "Beginner"), JSON.stringify(Array.isArray(req.body.learningObjectives) ? req.body.learningObjectives : [])]);
     res.status(201).json({ data: result.rows[0] });
 });
 
@@ -317,7 +380,20 @@ router.post("/quizzes/:id/questions", requireAuth, async (req, res) => {
 
 router.post("/quizzes/:id/attempts", requireAuth, async (req, res) => {
     const quizId = integer(req.params.id); if (!quizId) return res.status(400).json({ message: "Invalid quiz id" });
-    const result = await pool.query("INSERT INTO library_quiz_attempts (student_id, quiz_id, answers) VALUES ($1, $2, $3) RETURNING id, score, submitted_at", [req.auth.userId, quizId, JSON.stringify(req.body.answers || {})]); res.status(201).json({ data: result.rows[0] });
+    if (req.auth.role !== "student") return res.status(403).json({ message: "Student access required" });
+    const result = await pool.query(`INSERT INTO library_quiz_attempts (student_id, quiz_id, answers)
+        SELECT student.id, quiz.id, $3::jsonb
+        FROM users student
+        JOIN library_quizzes quiz ON quiz.id = $2 AND quiz.published = true
+        JOIN library_courses course ON course.id = quiz.course_id AND course.status = 'published'
+        WHERE student.id = $1 AND student.role = 'student' AND student.status = 'active'
+            AND student.school_id IS NOT NULL AND student.education_level_id = course.education_level_id
+            AND student.grade_id IS NOT DISTINCT FROM course.grade_id
+            AND student.program_id IS NOT DISTINCT FROM course.program_id
+            AND (course.school_id IS NULL OR course.school_id = student.school_id)
+        RETURNING id, score, submitted_at`, [req.auth.userId, quizId, JSON.stringify(req.body.answers || {})]);
+    if (!result.rows[0]) return res.status(404).json({ message: "Published quiz not found" });
+    res.status(201).json({ data: result.rows[0] });
 });
 
 router.patch("/courses/:id/status", requireAuth, async (req, res) => {

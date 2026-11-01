@@ -67,50 +67,39 @@ function requireAuth(req, res, next) {
 
 // REGISTER
 router.post("/register", async (req, res) => {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 120) : "";
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const password = req.body?.password;
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || typeof password !== "string" || password.length < 12) {
+    return res.status(400).json({ success: false, message: "Enter a valid name, email, and password of at least 12 characters." });
+  }
+  const client = await pool.connect();
   try {
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Name, email and password are required"
-      });
-    }
-
-    const existingUser = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      [email]
-    );
-
-    if (existingUser.rows.length > 0) {
-      return res.status(409).json({
-        success: false,
-        message: "Email already exists"
-      });
-    }
-
+    await client.query("BEGIN");
     const passwordHash = await bcrypt.hash(password, 10);
-
-    const result = await pool.query(
-      `INSERT INTO users (name, email, password_hash)
-       VALUES ($1, $2, $3)
+    const result = await client.query(
+      `INSERT INTO users (name, email, password_hash, role, status)
+       VALUES ($1, $2, $3, 'student', 'active')
        RETURNING id, name, email, role, created_at`,
       [name, email, passwordHash]
     );
-
+    await client.query("COMMIT");
     res.status(201).json({
       success: true,
       message: "Account created successfully",
       user: result.rows[0]
     });
-
   } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (error.status) return res.status(error.status).json({ success: false, message: error.message });
+    if (error.code === "23505") return res.status(409).json({ success: false, message: "Email already exists" });
     console.error("REGISTER ERROR:", error);
-
     res.status(500).json({
       success: false,
       message: "Server error"
     });
+  } finally {
+    client.release();
   }
 });
 

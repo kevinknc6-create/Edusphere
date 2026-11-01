@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050b1e">
+  <title>Sign in · EduSphere</title>
+  <link rel="preload" as="image" href="assets/poster.jpg">
+  <link rel="stylesheet" href="css/scroll-login.css">
+  <style>
+    html,
+    body {
+      margin: 0;
+      background: #050b1e
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ===================== EduSphere scroll-driven login (start) ===================== -->
+  <main class="esl" id="esl" data-scroll-login data-video="assets/scrub.mp4" data-video-hd="assets/scrub-hd.mp4"
+    data-video-mobile="assets/scrub-mobile.mp4" data-video-webm="assets/scrub.webm"
+    data-video-mobile-webm="assets/scrub-mobile.webm" data-poster="assets/poster.jpg"
+    data-poster-end="assets/poster-end.jpg">
+    <div class="esl-track">
+      <div class="esl-stage">
+
+        <div class="esl-media" aria-hidden="true">
+          <!-- No controls, no autoplay: scroll position drives currentTime -->
+          <video class="esl-video" muted playsinline preload="auto" tabindex="-1" disablepictureinpicture
+            disableremoteplayback controlslist="nodownload noplaybackrate noremoteplayback"></video>
+          <img class="esl-fallback" alt="" hidden decoding="async">
+        </div>
+        <div class="esl-shade" aria-hidden="true"></div>
+
+        <button class="esl-skip" type="button">Skip intro</button>
+
+        <div class="esl-hint" aria-hidden="true">
+          <span>Scroll to walk in</span>
+          <span class="esl-hint-line"></span>
+        </div>
+
+        <section class="esl-panel" id="esl-panel" aria-label="EduSphere account" inert aria-hidden="true">
+          <div class="esl-inner">
+
+            <div class="esl-brand">
+              <svg class="esl-mark" viewBox="0 0 40 40" aria-hidden="true">
+                <defs>
+                  <linearGradient id="esl-g" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#4b8bff" />
+                    <stop offset="1" stop-color="#2358e6" />
+                  </linearGradient>
+                </defs>
+                <rect width="40" height="40" rx="11" fill="url(#esl-g)" />
+                <path d="M20 8c.9 6.3 2.7 8.1 9 9-6.3.9-8.1 2.7-9 9-.9-6.3-2.7-8.1-9-9 6.3-.9 8.1-2.7 9-9Z" fill="none"
+                  stroke="#fff" stroke-width="1.8" stroke-linejoin="round" />
+                <path
+                  d="M29.5 24.5c.35 2.4 1 3.05 3.4 3.4-2.4.35-3.05 1-3.4 3.4-.35-2.4-1-3.05-3.4-3.4 2.4-.35 3.05-1 3.4-3.4Z"
+                  fill="#fff" />
+              </svg>
+              <span class="esl-word">Edu<span>Sphere</span></span>
+            </div>
+
+            <div class="esl-tabs" role="tablist" aria-label="Account" data-active="signin">
+              <span class="esl-tab-pill" aria-hidden="true"></span>
+              <button class="esl-tab" role="tab" type="button" data-view="signin" aria-selected="true"
+                aria-controls="esl-signin">Sign in</button>
+              <button class="esl-tab" role="tab" type="button" data-view="signup" aria-selected="false"
+                aria-controls="esl-signup">Create account</button>
+            </div>
+
+            <div>
+              <h2 class="esl-title" aria-live="polite">Sign in to your account</h2>
+              <p class="esl-sub">Continue your learning journey right where you left off.</p>
+            </div>
+
+            <div class="esl-views">
+
+              <!-- Sign in -->
+              <form class="esl-form" id="esl-signin" novalidate autocomplete="on" role="tabpanel">
+                <p class="esl-alert" role="alert" hidden></p>
+                <div class="esl-field">
+                  <label class="esl-label" for="esl-si-email">Email address</label>
+                  <input class="esl-input" id="esl-si-email" name="email" type="email" inputmode="email"
+                    autocomplete="email" placeholder="you@example.com" aria-describedby="esl-si-email-err" required>
+                  <p class="esl-err" id="esl-si-email-err"></p>
+                </div>
+                <div class="esl-field">
+                  <label class="esl-label" for="esl-si-pass">Password</label>
+                  <div class="esl-control has-eye">
+                    <input class="esl-input" id="esl-si-pass" name="password" type="password"
+                      autocomplete="current-password" placeholder="Your password" aria-describedby="esl-si-pass-err"
+                      required>
+                    <button class="esl-eye" type="button" data-for="esl-si-pass" aria-label="Show password"
+                      aria-pressed="false">
+                      <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                          d="M9.9 5.2A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.1 4M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a10 10 0 0 0 4.4-1" />
+                        <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18" />
+                      </svg>
+                    </button>
+                  </div>
+                  <p class="esl-err" id="esl-si-pass-err"></p>
+                </div>
+                <button class="esl-btn" type="submit"><span class="label">Sign in</span><span class="spin"
+                    aria-hidden="true"></span></button>
+                <div class="esl-row"><button class="esl-link" type="button" id="esl-forgot-link">Forgot your
+                    password?</button></div>
+                <p class="esl-foot">Don’t have an account? <button class="esl-link" type="button"
+                    data-goto="signup">Create one</button></p>
+              </form>
+
+              <!-- Create account -->
+              <form class="esl-form" id="esl-signup" novalidate autocomplete="on" role="tabpanel" data-side="right">
+                <p class="esl-alert" role="alert" hidden></p>
+                <div class="esl-field">
+                  <label class="esl-label" for="esl-su-name">Full name</label>
+                  <input class="esl-input" id="esl-su-name" name="name" type="text" autocomplete="name"
+                    placeholder="Your name" aria-describedby="esl-su-name-err" required>
+                  <p class="esl-err" id="esl-su-name-err"></p>
+                </div>
+                <div class="esl-field">
+                  <label class="esl-label" for="esl-su-email">Email address</label>
+                  <input class="esl-input" id="esl-su-email" name="email" type="email" inputmode="email"
+                    autocomplete="email" placeholder="you@example.com" aria-describedby="esl-su-email-err" required>
+                  <p class="esl-err" id="esl-su-email-err"></p>
+                </div>
+                <div class="esl-field">
+                  <label class="esl-label" for="esl-su-pass">Password</label>
+                  <div class="esl-control has-eye">
+                    <input class="esl-input" id="esl-su-pass" name="password" type="password"
+                      autocomplete="new-password" placeholder="At least 12 characters"
+                      aria-describedby="esl-su-pass-err" required>
+                    <button class="esl-eye" type="button" data-for="esl-su-pass" aria-label="Show password"
+                      aria-pressed="false">
+                      <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                          d="M9.9 5.2A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.1 4M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a10 10 0 0 0 4.4-1" />
+                        <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18" />
+                      </svg>
+                    </button>
+                  </div>
+                  <p class="esl-err" id="esl-su-pass-err"></p>
+                </div>
+                <div class="esl-field">
+                  <label class="esl-label" for="esl-su-confirm">Confirm password</label>
+                  <input class="esl-input" id="esl-su-confirm" name="confirm" type="password"
+                    autocomplete="new-password" placeholder="Repeat your password" aria-describedby="esl-su-confirm-err"
+                    required>
+                  <p class="esl-err" id="esl-su-confirm-err"></p>
+                </div>
+                <button class="esl-btn" type="submit"><span class="label">Create account</span><span class="spin"
+                    aria-hidden="true"></span></button>
+                <p class="esl-foot">Already have an account? <button class="esl-link" type="button"
+                    data-goto="signin">Sign in</button></p>
+              </form>
+
+              <!-- Forgot password -->
+              <form class="esl-form" id="esl-forgot" novalidate role="tabpanel" data-side="right">
+                <p class="esl-alert" role="alert" hidden></p>
+                <div class="esl-field">
+                  <label class="esl-label" for="esl-fp-email">Email address</label>
+                  <input class="esl-input" id="esl-fp-email" name="email" type="email" inputmode="email"
+                    autocomplete="email" placeholder="you@example.com" aria-describedby="esl-fp-email-err" required>
+                  <p class="esl-err" id="esl-fp-email-err"></p>
+                </div>
+                <button class="esl-btn" type="submit"><span class="label">Send reset link</span><span class="spin"
+                    aria-hidden="true"></span></button>
+                <div class="esl-row"><button class="esl-link" type="button" data-goto="signin">Back to sign in</button>
+                </div>
+              </form>
+
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+    <noscript>
+      <style>
+        .esl-track {
+          height: 100vh
+        }
+
+        .esl-panel {
+          opacity: 1 !important;
+          visibility: visible !important;
+          transform: translate(-50%, -50%) !important
+        }
+      </style>
+    </noscript>
+  </main>
+  <!-- ====================== EduSphere scroll-driven login (end) ====================== -->
+
+  <script src="js/auth-adapter.js"></script>
+  <script src="js/scroll-login.js" defer></script>
+</body>
+
+</html>

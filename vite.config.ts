@@ -11,6 +11,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         login: resolve(__dirname, 'edusphere-login (20).html'),
         admin: resolve(__dirname, 'Admin Dashboard.html'),
+        'admin-learning-materials': resolve(__dirname, 'admin-learning-materials.html'),
         'classe/s1': resolve(__dirname, 'classe/s1.html'),
         'classe/s2': resolve(__dirname, 'classe/s2.html'),
         'classe/s3': resolve(__dirname, 'classe/s3.html'),

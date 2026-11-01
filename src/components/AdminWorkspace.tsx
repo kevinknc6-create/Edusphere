@@ -3,6 +3,10 @@ import { createPortal } from 'react-dom'
 import { Archive, Check, ChevronRight, FileText, LayoutDashboard, Plus, RefreshCw, Search, ShieldCheck, Trash2, Users } from 'lucide-react'
 import { api } from '../lib/api'
 import type { AppRole } from '../security/authorization'
+import { SchoolsSection, SubjectNotesSection } from './AdminContentManagement'
+import AdminCurriculumManagement from './AdminCurriculumManagement'
+import LearningMaterialsManagement from './LearningMaterialsManagement'
+import SchoolMembershipManagement from './SchoolMembershipManagement'
 
 type RecordValue = Record<string, unknown>
 type AdminWorkspaceProps = { role: AppRole; navigationTargetId?: string }
@@ -13,7 +17,7 @@ const contentTabs = [
     ['Courses', 'courses'], ['Modules', 'modules'], ['Lessons', 'lessons'], ['Lesson notes', 'notes'],
     ['Examples', 'examples'], ['Exercises', 'exercises'], ['Homework', 'assignments'], ['Quizzes', 'quizzes'], ['Tests', 'tests'], ['Exams', 'exams'],
 ] as const
-const tabs = [['Dashboard', 'dashboard'], ['Schools', 'schools'], ...contentTabs, ['Teachers', 'teachers'], ['Teacher Verification', 'verification'], ['Content Review', 'review'], ['Users', 'students'], ['Class Dashboards', 'class-dashboards'], ['AI Tutor', 'ai'], ['Settings', 'settings'], ['Audit Logs', 'audit']] as const
+const tabs = [['Dashboard', 'dashboard'], ['Schools', 'schools'], ['School Enrollment', 'school-enrollment'], ['Subject notes', 'subject-notes'], ['Learning Materials', 'learning-materials'], ['Curriculum Registry', 'curriculum-registry'], ...contentTabs, ['Teachers', 'teachers'], ['Teacher Verification', 'verification'], ['Content Review', 'review'], ['Users', 'students'], ['Class Dashboards', 'class-dashboards'], ['AI Tutor', 'ai'], ['Settings', 'settings'], ['Audit Logs', 'audit']] as const
 
 function text(value: unknown) { return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value) }
 function titleFor(record: RecordValue) { return text(record.title || record.name || record.prompt || 'Untitled') }
@@ -22,6 +26,9 @@ export default function AdminWorkspace({ role, navigationTargetId }: AdminWorksp
     const [tab, setTab] = useState('dashboard')
     const [overview, setOverview] = useState<RecordValue | null>(null)
     const [taxonomy, setTaxonomy] = useState<Taxonomy>({ levels: [], grades: [], programs: [], subjects: [] })
+    const [schools, setSchools] = useState<RecordValue[]>([])
+    const [referencesLoading, setReferencesLoading] = useState(true)
+    const [curriculumAvailable, setCurriculumAvailable] = useState(false)
     const [contentOptions, setContentOptions] = useState<{ courses: RecordValue[]; modules: RecordValue[]; lessons: RecordValue[] }>({ courses: [], modules: [], lessons: [] })
     const [rows, setRows] = useState<RecordValue[]>([])
     const [teachers, setTeachers] = useState<RecordValue[]>([])
@@ -41,9 +48,22 @@ export default function AdminWorkspace({ role, navigationTargetId }: AdminWorksp
     const [composerOpen, setComposerOpen] = useState(false)
 
     async function loadReferences() {
-        const [taxonomyResult, teacherResult] = await Promise.all([api.adminTaxonomy(), api.adminTeachers()])
-        setTaxonomy(taxonomyResult.data)
-        setTeachers(teacherResult.data)
+        setReferencesLoading(true)
+        const [taxonomyResult, teacherResult, schoolResult] = await Promise.allSettled([api.adminTaxonomy(), api.adminTeachers(), api.adminSchools()])
+        const failures: string[] = []
+        if (taxonomyResult.status === 'fulfilled') {
+            setTaxonomy(taxonomyResult.value.data)
+            setCurriculumAvailable(true)
+        } else {
+            setCurriculumAvailable(false)
+            failures.push('Curriculum classes could not be loaded.')
+        }
+        if (teacherResult.status === 'fulfilled') setTeachers(teacherResult.value.data)
+        else failures.push('Teacher records could not be loaded.')
+        if (schoolResult.status === 'fulfilled') setSchools(schoolResult.value.data)
+        else failures.push('School records could not be loaded.')
+        setReferencesLoading(false)
+        if (failures.length) setError(failures.join(' '))
     }
     async function loadTab(nextTab = tab) {
         setError('')
@@ -60,6 +80,13 @@ export default function AdminWorkspace({ role, navigationTargetId }: AdminWorksp
             }
             if (nextTab === 'class-dashboards') { setClassDashboards((await api.adminClassDashboards()).data); return }
             if (nextTab === 'audit') { setAuditLogs((await api.adminAuditLogs()).data); return }
+            if (nextTab === 'schools') { setSchools((await api.adminSchools({ search: filters.search, limit: 100, offset: filters.offset })).data); return }
+            if (nextTab === 'subject-notes') {
+                const result = await api.adminSubjectNotes({ search: filters.search, limit: 100, offset: filters.offset })
+                setRows(result.data)
+                setTotalRows(result.meta.total)
+                return
+            }
             const content = contentTabs.find((item) => item[1] === nextTab)
             if (content) {
                 const result = await api.adminContent(content[1], { ...filters, limit: 100 })
@@ -103,6 +130,36 @@ export default function AdminWorkspace({ role, navigationTargetId }: AdminWorksp
         setBusy(true); setError('')
         try { await api.deleteAdminContent(tab, id); setSuccess('Content deleted.'); await loadTab(tab) } catch (caught) { setError(caught instanceof Error ? caught.message : 'Content could not be deleted') } finally { setBusy(false) }
     }
+    async function saveSubjectNote(id: string | null, input: RecordValue) {
+        setBusy(true); setError(''); setSuccess('')
+        try {
+            if (id) await api.updateAdminSubjectNote(id, input)
+            else await api.createAdminSubjectNote(input)
+            setSuccess(id ? 'Subject note updated.' : 'Subject note saved.')
+            await loadTab('subject-notes')
+        } catch (caught) {
+            setError(caught instanceof Error ? caught.message : 'Subject note could not be saved')
+            throw caught
+        } finally { setBusy(false) }
+    }
+    async function setSubjectNoteStatus(id: string, nextStatus: string) {
+        setBusy(true); setError('')
+        try { await api.setAdminSubjectNoteStatus(id, nextStatus); setSuccess('Subject note status updated.'); await loadTab('subject-notes') } catch (caught) { setError(caught instanceof Error ? caught.message : 'Subject note status could not be changed') } finally { setBusy(false) }
+    }
+    async function deleteSubjectNote(id: string) {
+        if (!window.confirm('Delete this subject note permanently?')) return
+        setBusy(true); setError('')
+        try { await api.deleteAdminSubjectNote(id); setSuccess('Subject note deleted.'); await loadTab('subject-notes') } catch (caught) { setError(caught instanceof Error ? caught.message : 'Subject note could not be deleted') } finally { setBusy(false) }
+    }
+    async function createSchool(input: { name: string; email: string; location: string; phone: string }) {
+        setBusy(true); setError(''); setSuccess('')
+        try { await api.createAdminSchool({ ...input, status: 'active' }); setSuccess('School saved.'); await loadReferences(); await loadTab('schools') } catch (caught) { setError(caught instanceof Error ? caught.message : 'School could not be saved'); throw caught } finally { setBusy(false) }
+    }
+    async function updateSchoolStatus(school: RecordValue) {
+        const status = school.status === 'active' ? 'inactive' : 'active'
+        setBusy(true); setError('')
+        try { await api.updateAdminSchool(text(school.id), { status }); setSuccess(`School ${status}.`); await loadReferences(); await loadTab('schools') } catch (caught) { setError(caught instanceof Error ? caught.message : 'School status could not be updated') } finally { setBusy(false) }
+    }
     async function updateUserStatus(user: RecordValue) {
         const nextStatus = user.status === 'active' ? 'suspended' : 'active'
         setBusy(true); setError(''); setSuccess('')
@@ -114,13 +171,17 @@ export default function AdminWorkspace({ role, navigationTargetId }: AdminWorksp
     return <>
         {navigationTargetId ? navigationTarget ? createPortal(navigation, navigationTarget) : null : navigation}
         <div className="admin-page">
-        <div className="admin-heading"><div><p className="eyebrow">{role === 'super-admin' ? 'Super Admin CMS' : 'Admin CMS'}</p><h1>Curriculum control center</h1><p>Manage learning content by its exact education path.</p></div><div className="admin-heading-actions"><button className="secondary-button" onClick={() => void loadTab()} disabled={busy}><RefreshCw size={15} /> Refresh</button><button className="primary-button admin-primary-cta" onClick={() => { const next = content ? tab : 'courses'; if (!content) setTab(next); setComposerOpen(true); window.setTimeout(() => document.getElementById('admin-content-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0) }}><Plus size={16} /> Add Content</button></div></div>
+        <div className="admin-heading"><div><p className="eyebrow">{role === 'super-admin' ? 'Super Admin CMS' : 'Admin CMS'}</p><h1>Curriculum control center</h1><p>Manage learning content by its exact education path.</p></div><div className="admin-heading-actions"><button className="secondary-button" onClick={() => void loadTab()} disabled={busy}><RefreshCw size={15} /> Refresh</button><button className="primary-button admin-primary-cta" disabled={!content} onClick={() => { const next = content ? tab : 'courses'; if (!content) setTab(next); setComposerOpen(true); window.setTimeout(() => document.getElementById('admin-content-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0) }}><Plus size={16} /> Add Content</button></div></div>
         {error && <div className="auth-error" role="alert">{error}</div>}
         {success && <div className="saved-notice" role="status">{success}</div>}
         {loading && <div className="admin-empty" role="status">Loading current database records...</div>}
         {tab === 'dashboard' && <Overview data={overview} />}
+        {tab === 'curriculum-registry' && <AdminCurriculumManagement />}
+        {tab === 'learning-materials' && <LearningMaterialsManagement />}
+        {tab === 'school-enrollment' && <SchoolMembershipManagement />}
         {content && <ContentSection label={content[0]} type={content[1]} rows={rows} totalRows={totalRows} form={form} filters={filters} setFilters={setFilters} busy={busy} taxonomy={taxonomy} teachers={teachers} options={contentOptions} setField={setField} create={create} update={async (id, input) => { await api.updateAdminContent(tab, id, input); await loadTab(tab) }} changeStatus={changeStatus} remove={remove} composerOpen={composerOpen} setComposerOpen={setComposerOpen} />}
-        {tab === 'schools' && <section className="admin-panel admin-full-panel"><p className="eyebrow">School management</p><h2>School records are not part of the current data model</h2><p>The active Edusphere schema has no schools table or school-to-user, class, or content relationships. This section is intentionally read-only rather than showing simulated school records. Adding school administration safely requires a coordinated schema and authorization update across the existing learning and AI APIs.</p></section>}
+        {tab === 'schools' && <SchoolsSection rows={schools} filters={filters} setFilters={setFilters} busy={busy} create={createSchool} updateStatus={updateSchoolStatus} />}
+        {tab === 'subject-notes' && <SubjectNotesSection rows={rows} totalRows={totalRows} schools={schools} taxonomy={taxonomy} referencesLoading={referencesLoading} curriculumAvailable={curriculumAvailable} filters={filters} setFilters={setFilters} busy={busy} save={saveSubjectNote} changeStatus={setSubjectNoteStatus} remove={deleteSubjectNote} />}
         {tab === 'teachers' && <TeacherSection teachers={teachers} create={async (input) => { await api.createAdminTeacher(input); await loadTab(tab) }} verify={async (id, status) => { await api.updateTeacherStatus(id, status); await loadTab(tab) }} resend={async (id) => { await api.resendTeacherVerification(id); await loadTab(tab) }} savePermissions={async (id, permissions) => { await api.setTeacherPermissions(id, permissions); await loadTab(tab) }} />}
         {tab === 'verification' && <TeacherSection teachers={teachers} create={async (input) => { await api.createAdminTeacher(input); await loadTab(tab) }} verify={async (id, status) => { await api.updateTeacherStatus(id, status); await loadTab(tab) }} resend={async (id) => { await api.resendTeacherVerification(id); await loadTab(tab) }} savePermissions={async (id, permissions) => { await api.setTeacherPermissions(id, permissions); await loadTab(tab) }} verification />}
         {tab === 'review' && <ReviewSection rows={reviewRows} />}

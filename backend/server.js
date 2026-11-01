@@ -10,6 +10,8 @@ const learningRoutes = require("./routes/learning");
 const studentRoutes = require("./routes/student");
 const adminRoutes = require("./routes/admin");
 const messageRoutes = require("./routes/messages");
+const uploadRoutes = require("./routes/uploads");
+const { recoverPendingMaterials } = require("./services/learningMaterials");
 
 const app = express();
 app.get("/health", (_req, res) => res.json({ status: "ok", service: "edusphere-legacy-api" }));
@@ -23,6 +25,7 @@ app.use("/api/learning", learningRoutes);
 app.use("/api/student", studentRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/uploads", uploadRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "Edusphere API is running" });
@@ -49,4 +52,7 @@ app.get("/api/test-db", async (req, res) => {
 
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
+  recoverPendingMaterials().catch((error) => {
+    console.error("LEARNING MATERIAL RECOVERY ERROR:", error.message);
+  });
 });

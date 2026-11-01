@@ -1,0 +1,368 @@
+/* EduSphere scroll-driven login — styles.
+   Everything is scoped under .esl so it can't collide with the rest of the app. */
+
+.esl {
+  --esl-bg: #050b1e;
+  --esl-ink: #f2f6ff;
+  --esl-mute: #a9bbe0;
+  --esl-blue: #2f6bff;
+  --esl-blue-deep: #2358e6;
+  --esl-blue-hi: #6da0ff;
+  --esl-line: rgba(120, 160, 255, 0.24);
+  --esl-field: rgba(255, 255, 255, 0.055);
+  --esl-error: #ff9b9b;
+  --esl-ok: #7ff0b4;
+  --esl-font: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  position: relative;
+  background: var(--esl-bg);
+  color: var(--esl-ink);
+  font-family: var(--esl-font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.esl *, .esl *::before, .esl *::after { box-sizing: border-box; }
+
+/* ---------- Scroll track + sticky stage ---------- */
+.esl-track {
+  position: relative;
+  height: 520vh;
+  height: 520svh;
+  overflow-x: clip;
+}
+.esl-stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--esl-bg);
+  isolation: isolate;
+}
+.esl.is-static .esl-track { height: 100vh; height: 100dvh; }
+
+/* ---------- Video / media ---------- */
+.esl-media {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;      /* the video can never be clicked, paused or dragged */
+  will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.esl-video, .esl-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 50%;
+  display: block;
+}
+.esl-fallback { opacity: 0; }
+.esl-video::-webkit-media-controls,
+.esl-video::-webkit-media-controls-enclosure,
+.esl-video::-webkit-media-controls-panel { display: none !important; }
+
+/* Portrait: the scene sits in a band; feather its top and bottom edges into the page colour */
+.esl[data-layout="sheet"] .esl-media {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 5%, #000 84%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 5%, #000 84%, transparent 100%);
+}
+
+/* Soft vignette so the panel and hint always have contrast against the scene */
+.esl-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(3, 8, 24, 0.55) 100%),
+    linear-gradient(to top, rgba(3, 8, 24, 0.45), transparent 28%);
+}
+
+/* ---------- Hint + skip ---------- */
+.esl-hint {
+  position: absolute;
+  left: 50%;
+  bottom: max(1.5rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.01em;
+  color: var(--esl-mute);
+  pointer-events: none;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
+}
+.esl-hint-line {
+  width: 1px;
+  height: 2.4rem;
+  background: linear-gradient(to bottom, rgba(109, 160, 255, 0), var(--esl-blue-hi));
+  transform-origin: top;
+  animation: esl-drip 1.8s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+}
+@keyframes esl-drip {
+  0% { transform: scaleY(0); opacity: 0; }
+  40% { transform: scaleY(1); opacity: 1; }
+  100% { transform: scaleY(1); opacity: 0; }
+}
+
+.esl-skip {
+  position: absolute;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  z-index: 3;
+  appearance: none;
+  border: 1px solid var(--esl-line);
+  background: rgba(8, 18, 46, 0.55);
+  color: var(--esl-ink);
+  font: 500 0.85rem/1 var(--esl-font);
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.2s, border-color 0.2s;
+}
+.esl-skip:hover { background: rgba(20, 40, 96, 0.7); border-color: rgba(140, 180, 255, 0.5); }
+
+/* ---------- Auth panel ---------- */
+.esl-panel {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  width: max(var(--esl-w, 28rem), min(92vw, 24rem));
+  min-height: var(--esl-h, 0px);
+  max-height: calc(100% - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  border-radius: 20px;
+  border: 1px solid rgba(150, 215, 255, calc(0.3 + 0.6 * var(--esl-rim, 0)));
+  background:
+    radial-gradient(90% 60% at 50% 0%, rgba(47, 107, 255, 0.16), transparent 70%),
+    linear-gradient(180deg, #0c1a3f 0%, #081230 100%);
+  /* --esl-rim (1 -> 0.25) is set from the scroll: a bright holographic rim while the panel rises, then calm. */
+  box-shadow:
+    0 40px 90px -20px rgba(0, 8, 30, 0.75),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 0 calc(30px + 50px * var(--esl-rim, 0)) rgba(70, 150, 255, calc(0.2 + 0.5 * var(--esl-rim, 0))),
+    0 0 calc(4px + 14px * var(--esl-rim, 0)) rgba(140, 215, 255, calc(0.6 * var(--esl-rim, 0))),
+    0 0 0 calc(2px * var(--esl-rim, 0)) rgba(120, 200, 255, calc(0.45 * var(--esl-rim, 0)));
+  opacity: 0;
+  visibility: hidden;
+  will-change: transform, opacity;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 160, 255, 0.3) transparent;
+}
+.esl-inner {
+  width: min(100%, 25rem);
+  margin: auto;
+  padding: clamp(1.25rem, 3.2vh, 2.4rem) clamp(1.25rem, 3vw, 2rem);
+}
+
+.esl[data-layout="sheet"] .esl-panel {
+  left: 0;
+  right: 0;
+  top: auto;
+  bottom: 0;
+  width: 100%;
+  min-height: 0;
+  max-height: 90%;
+  border-radius: 24px 24px 0 0;
+  border-bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.esl[data-layout="sheet"] .esl-inner { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+
+/* Brand */
+.esl-brand { display: flex; align-items: center; justify-content: center; gap: 0.7rem; margin-bottom: 1.15rem; }
+.esl-mark { width: 2.5rem; height: 2.5rem; flex: none; }
+.esl-word { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+.esl-word span { color: var(--esl-blue-hi); }
+
+/* Tabs */
+.esl-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  margin-bottom: 1.25rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--esl-line);
+}
+.esl-tabs[hidden] { display: none; }
+.esl-tab-pill {
+  position: absolute;
+  top: 4px; bottom: 4px; left: 4px;
+  width: calc(50% - 4px);
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--esl-blue), var(--esl-blue-deep));
+  box-shadow: 0 6px 18px rgba(47, 107, 255, 0.4);
+  transition: transform 0.35s cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+.esl-tabs[data-active="signup"] .esl-tab-pill { transform: translateX(100%); }
+.esl-tab {
+  position: relative;
+  z-index: 1;
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--esl-mute);
+  font: 600 0.9rem/1 var(--esl-font);
+  padding: 0.8rem 0.5rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: color 0.25s;
+}
+.esl-tab[aria-selected="true"] { color: #fff; }
+
+/* Headings */
+.esl-title { margin: 0 0 0.35rem; font-size: 1.45rem; line-height: 1.2; font-weight: 700; letter-spacing: -0.015em; }
+.esl-sub { margin: 0 0 1.2rem; font-size: 0.93rem; line-height: 1.5; color: var(--esl-mute); max-width: 40ch; }
+
+/* Views (forms cross-fade in one grid cell; wrapper height animates) */
+.esl-views {
+  display: grid;
+  overflow: hidden;
+  padding: 4px;
+  margin: -4px;
+  transition: height 0.4s cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+.esl-form {
+  grid-area: 1 / 1;
+  align-self: start;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(14px);
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.3, 0.9, 0.3, 1), visibility 0s linear 0.4s;
+}
+.esl-form[data-side="left"] { transform: translateX(-14px); }
+.esl-form.is-active {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
+}
+
+/* Fields */
+.esl-field { margin-bottom: 0.95rem; }
+.esl-label { display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 600; color: #dce7ff; }
+.esl-control { position: relative; }
+.esl-input {
+  width: 100%;
+  height: 3rem;
+  padding: 0 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--esl-line);
+  background: var(--esl-field);
+  color: var(--esl-ink);
+  font: 400 1rem/1 var(--esl-font);   /* 16px stops iOS zooming on focus */
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.esl-input::placeholder { color: #7f92bd; }
+.esl-input:hover { border-color: rgba(140, 180, 255, 0.42); }
+.esl-input:focus { outline: none; border-color: var(--esl-blue-hi); background: rgba(255, 255, 255, 0.08); box-shadow: 0 0 0 3px rgba(80, 130, 255, 0.28); }
+.esl-input[aria-invalid="true"] { border-color: var(--esl-error); }
+.esl-control.has-eye .esl-input { padding-right: 3rem; }
+.esl-eye {
+  position: absolute;
+  top: 50%; right: 0.35rem;
+  transform: translateY(-50%);
+  width: 2.4rem; height: 2.4rem;
+  display: grid; place-items: center;
+  appearance: none; border: 0; background: none;
+  color: var(--esl-mute);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.esl-eye:hover { color: #fff; background: rgba(255, 255, 255, 0.07); }
+.esl-eye svg { width: 1.2rem; height: 1.2rem; }
+.esl-eye .off { display: none; }
+.esl-eye[aria-pressed="true"] .on { display: none; }
+.esl-eye[aria-pressed="true"] .off { display: block; }
+.esl-hintline, .esl-err { margin: 0.4rem 0 0; font-size: 0.8rem; line-height: 1.4; }
+.esl-hintline { color: var(--esl-mute); }
+.esl-err { color: var(--esl-error); }
+.esl-err:empty { display: none; }
+
+/* Buttons + links */
+.esl-btn {
+  position: relative;
+  width: 100%;
+  height: 3rem;
+  margin-top: 0.35rem;
+  appearance: none;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #3a78ff, var(--esl-blue-deep));
+  color: #fff;
+  font: 600 1rem/1 var(--esl-font);
+  cursor: pointer;
+  box-shadow: 0 10px 26px -8px rgba(47, 107, 255, 0.7), 0 1px 0 rgba(255, 255, 255, 0.25) inset;
+  transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
+}
+.esl-btn:hover { filter: brightness(1.08); box-shadow: 0 14px 30px -8px rgba(47, 107, 255, 0.85), 0 1px 0 rgba(255, 255, 255, 0.25) inset; }
+.esl-btn:active { transform: translateY(1px); }
+.esl-btn[disabled] { cursor: progress; filter: saturate(0.7) brightness(0.9); }
+.esl-btn .spin {
+  display: none;
+  width: 1.15rem; height: 1.15rem;
+  margin: auto;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: esl-spin 0.7s linear infinite;
+}
+.esl-btn[aria-busy="true"] .label { display: none; }
+.esl-btn[aria-busy="true"] .spin { display: block; }
+@keyframes esl-spin { to { transform: rotate(360deg); } }
+
+.esl-link {
+  appearance: none; border: 0; background: none; padding: 0.25rem 0;
+  color: var(--esl-blue-hi);
+  font: 600 0.9rem/1.3 var(--esl-font);
+  cursor: pointer;
+  text-decoration: none;
+}
+.esl-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.esl-row { display: flex; justify-content: center; margin-top: 0.85rem; }
+.esl-foot { margin: 1rem 0 0; text-align: center; font-size: 0.9rem; color: var(--esl-mute); }
+
+/* Form-level message */
+.esl-alert {
+  margin: 0 0 0.95rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  border: 1px solid;
+}
+.esl-alert[hidden] { display: none; }
+.esl-alert[data-kind="error"] { color: #ffd0d0; background: rgba(255, 90, 90, 0.1); border-color: rgba(255, 130, 130, 0.4); }
+.esl-alert[data-kind="ok"] { color: #c9ffe3; background: rgba(60, 220, 140, 0.1); border-color: rgba(120, 240, 180, 0.4); }
+
+/* Staggered entrance of the panel contents once it's live */
+/* (The panel's contents fade in with the scroll position — see render() — so there is never an empty box.) */
+
+.esl :focus-visible { outline: 2px solid var(--esl-blue-hi); outline-offset: 2px; }
+.esl .esl-input:focus-visible { outline: none; }
+
+.esl-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Reduced motion: skip the scroll story, show the sign-in directly ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .esl-hint-line, .esl-btn .spin { animation-duration: 0.01ms; animation-iteration-count: 1; }
+  .esl-tab-pill, .esl-views, .esl-form, .esl-inner > * { transition-duration: 0.01ms !important; transition-delay: 0s !important; }
+}
+
+/* ---------- Small screens ---------- */
+@media (max-width: 760px) {
+  .esl-track { height: 480vh; height: 480svh; }
+  .esl-skip { padding: 0.6rem 0.9rem; }
+}

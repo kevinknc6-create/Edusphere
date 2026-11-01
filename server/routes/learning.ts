@@ -40,6 +40,10 @@ router.get('/taxonomy', requireRole('student', 'teacher'), asyncHandler(async (_
     ])
     response.json({ data: { levels: levels.rows, grades: grades.rows, faculties: faculties.rows, programs: programs.rows } })
 }))
+router.get('/schools', requireRole('student'), asyncHandler(async (_request, response) => {
+    const result = await pool.query("SELECT id, name FROM admin_schools WHERE status = 'active' ORDER BY name")
+    response.json({ data: result.rows })
+}))
 router.use(requireRole('student'))
 router.get('/search', asyncHandler(async (request, response) => {
     const query = z.string().trim().min(2).max(120).parse(request.query.q)

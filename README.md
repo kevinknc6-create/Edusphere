@@ -38,11 +38,25 @@ psql "$env:DATABASE_URL" -f server/db/migrations/012_password_reset_codes.sql
 psql "$env:DATABASE_URL" -f server/db/migrations/013_super_admin.sql
 psql "$env:DATABASE_URL" -f server/db/migrations/014_admin_dashboard.sql
 psql "$env:DATABASE_URL" -f server/db/migrations/015_google_auth_identities.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/016_subject_notes.sql
+psql "$env:DATABASE_URL" -f server/db/migrations/017_subject_note_attachments.sql
 ```
 
 These migrations belong only to the TypeScript server schema. Never run them against the existing legacy `edusphere_db`.
 
 The TypeScript migrations above are for a separate TypeScript-server database. The dashboard started by `npm run dev:all` uses the legacy API and its database; apply legacy migrations from `backend/migrations/` to that database instead. Never run the TypeScript migrations against the legacy `edusphere_db`.
+
+For the legacy `npm run dev:all` deployment, apply `backend/migrations/017_subject_notes.sql` and then `backend/migrations/018_subject_note_attachments.sql` after its existing migrations. The second migration adds file attachments to the legacy database. Apply `server/db/migrations/016_subject_notes.sql` and then `server/db/migrations/017_subject_note_attachments.sql` only to a database used by the TypeScript server. Attachments are stored in that database, not on the application server's local disk.
+
+The primary/secondary student dashboard and curriculum-enrollment data use the legacy course-library database. After its existing curriculum migrations through `backend/migrations/018_subject_note_attachments.sql`, apply `backend/migrations/019_curriculum_enrollment_and_outcomes.sql`, then `backend/migrations/020_learning_materials_knowledge.sql`. Migration 020 adds processing, rights-confirmation, assignment and full-text index metadata without storing document bytes in PostgreSQL. See [Rwanda curriculum research](./docs/rwanda-curriculum-research.md) for verified sources and known evidence gaps.
+
+The Admin Dashboard's **Learning Materials** section uploads private PDF files to `backend/storage/learning-materials` by default (or to the path configured by `EDUSPHERE_MATERIAL_STORAGE_DIR`). Configure that directory as a persistent, access-controlled volume and include it in backups before production use. Files are excluded from Git. Set `EDUSPHERE_MATERIAL_STORAGE_DIR` in the legacy backend environment to use a mounted volume. Uploads are limited to 15 MB, PDF only. URL ingestion accepts public HTTP/HTTPS HTML, plain text, or text-based PDF resources up to 15 MB; private hosts, redirects to non-public hosts, unsupported formats, and scanned PDFs are rejected. Administrators must confirm rights to upload, process, and share the material. New materials remain drafts until processing completes and an administrator publishes them.
+
+Materials assigned to an entire school/class/program can be uploaded without an active verified curriculum version. A material assigned to a curriculum or TVET subject still requires that subject's active verified version. Unversioned materials remain limited to the exact school and education scope selected by an administrator.
+
+PDF text and supported page text are indexed in PostgreSQL full-text search. Student dashboards and AI Tutor retrieval are restricted to published, processed, rights-confirmed material assigned to that student's active school and matching class/program/subject. The AI chat endpoint cites only retrieved sources and does not claim document access when no matching excerpt exists. Processing is retried for queued records at legacy API startup. This local-filesystem storage is intended only where a persistent private volume is available; multi-instance deployments need shared durable storage or a future object-storage adapter.
+
+The old `/classe/s1.html`, `/classe/s2.html`, and `/classe/s3.html` entry points now forward to `/`; the signed-in student's stored account profile determines the dashboard.
 
 ## Running
 
@@ -91,6 +105,7 @@ npm run build
 - `POST /api/learning/lessons/:id/progress`
 
 ### Student
+- `GET /api/student/subjects/:subjectId/notes`
 
 - `PUT|DELETE /api/student/bookmarks/:lessonId`
 - `PUT /api/student/notes/:lessonId`
@@ -106,6 +121,23 @@ npm run build
 
 - `GET /api/admin/overview`
 - `GET /api/admin/taxonomy`
+- `GET|POST /api/admin/subject-notes`
+- `PATCH|DELETE /api/admin/subject-notes/:id`
+- `PATCH /api/admin/subject-notes/:id/status`
+- `GET /api/admin/learning-materials`
+- `GET /api/admin/learning-material-options`
+- `POST /api/admin/learning-materials` (validate and index an accessible public URL)
+- `POST /api/admin/learning-materials/upload` (PDF upload, max 15 MB)
+- `GET /api/admin/learning-materials/:id/file` (administrator-only PDF preview/download)
+- `PATCH /api/admin/learning-materials/:id` (update assignments and metadata)
+- `PATCH /api/admin/learning-materials/:id/status` (publish only after processing completes)
+- `POST /api/admin/learning-materials/:id/retry`
+- `DELETE /api/admin/learning-materials/:id`
+- `GET /api/student/materials/:materialId/file` (authorized published student material only)
+- `POST /api/uploads/subject-note-attachments` (admin; PDF, DOCX, PPTX, JPEG, PNG, or WebP; up to 15 MB per file)
+- `DELETE /api/admin/subject-note-attachments/:id` (remove an uploaded file before attaching it to a note)
+- `GET /api/student/subjects/:subjectId/notes`
+- `GET /api/student/subject-note-attachments/:attachmentId` (student access is limited to published notes in the student's school/class)
 - `GET /api/admin/review`
 - `GET /api/admin/teachers`
 - `POST /api/admin/teachers`
@@ -131,7 +163,7 @@ npm run build
 - `POST /api/messages/:conversationId/messages`
 - `PATCH /api/messages/:conversationId/read`
 
-Uploads are limited to JPEG, PNG, WebP, PDF, and MP4 files with a 10 MB limit at `POST /api/uploads`.
+Subject note files are stored in the configured PostgreSQL database so they remain available after deployment or server restarts.
 
 ## Security
 
@@ -291,7 +323,7 @@ npm run build
 - `POST /api/ai/chat` (authenticated students, teachers, and admins; private conversations are owner-scoped)
 - `POST /api/ai/generate` (authenticated teachers/admins; stores editable draft content)
 
-AI requests require the optional server-side `AI_API_KEY`. When it is absent or the provider fails, the API returns a friendly `503` response; no key is sent to the browser.
+AI requests use server-side settings in `backend/.env`. Set `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, and `GEMINI_MODEL=gemini-3.5-flash-lite` for Gemini. For OpenAI, set `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and `OPENAI_MODEL`. The selected provider account must have access to its model and available quota. Student chat searches published, processed PDF text using the current question and recent follow-ups, then sends only matching material assigned to that student's active school and class/program to the tutor. Responses use simple, learner-friendly explanations, follow the learner's question language, and link related materials. Greetings skip the PDF search. Student chat includes up to the last five completed turns from the current page session so follow-up questions have context; starting a new chat or reloading the page clears that in-memory history. Chat history is not persisted in the legacy database. When the key is absent or the provider fails, the API returns a friendly `503` response; no key is sent to the browser.
 
 ### Student
 

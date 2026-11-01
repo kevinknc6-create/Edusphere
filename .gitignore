@@ -25,6 +25,7 @@ build/
 dist-server/
 **/dist/
 **/build/
+backend/storage/
 *.local
 
 # Logs

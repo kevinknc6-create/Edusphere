@@ -26,17 +26,20 @@ type Question = { id: number; type: 'multiple-choice' | 'true-false' | 'fill-bla
 type AssessmentResult = { mode: AssessmentMode; score: number; correct: number; total: number; completedAt: string; answers: Record<number, string> }
 type Course = { id: string | number; title: string; category: string; teacher: string; lessons: number; progress: number; difficulty: string; color: string; icon: string; description: string }
 type TeacherCourse = { id: number; title: string; subject: string; students: number; lessons: number; published: boolean; progress: number; color: string }
-function classDashboardPath(profile: EducationProfile | null) {
-    if (!profile || !/secondary|senior/i.test(profile.education_level_name || '')) return null
-    const grade = profile.grade_name?.match(/(?:senior|secondary|s)?\s*([1-3])\s*$/i)?.[1]
-    return grade ? `/classe/s${grade}.html` : null
-}
 function hasCompleteEducationProfile(profile: EducationProfile | null) {
-    if (!profile?.education_level_id) return false
+    if (!profile?.education_level_id || !profile.school_id || profile.school_status !== 'active') return false
     const level = (profile.education_level_name || '').toLowerCase()
-    if (level.includes('university') || level.includes('higher')) return Boolean(profile.program_id)
-    if (level.includes('tvet') || level.includes('sod') || /\bl[345]\b/.test(level)) return Boolean(profile.grade_id && profile.program_id)
+    const category = (profile.education_level_category || '').toLowerCase()
+    if (category.includes('university') || level.includes('university') || level.includes('higher')) return Boolean(profile.program_id)
+    if (category.includes('tvet') || level.includes('tvet') || level.includes('sod') || /\bl[345]\b/i.test(profile.grade_name || level)) return Boolean(profile.grade_id && profile.program_id)
     return Boolean(profile.grade_id)
+}
+function educationCategory(profile: EducationProfile | null): 'primary' | 'secondary' | 'tvet' | 'university' {
+    const level = (profile?.education_level_name || '').toLowerCase()
+    const category = (profile?.education_level_category || '').toLowerCase()
+    if (category.includes('tvet') || level.includes('tvet') || /^l[345]$/i.test(profile?.grade_name || '')) return 'tvet'
+    if (category.includes('university') || level.includes('university') || level.includes('higher')) return 'university'
+    return category.includes('primary') || level.includes('primary') ? 'primary' : 'secondary'
 }
 const courses: Course[] = []
 const subjects = ['All subjects']
@@ -107,6 +110,9 @@ function App() {
     }
 
     const currentRole = currentUser?.role
+    const dashboardCategory = educationCategory(educationProfile)
+    const profileProgramId = educationProfile?.program_id
+    const profileGradeId = educationProfile?.grade_id
     useEffect(() => {
         if (!isAuthenticated || !currentRole || !canAccessAdmin(currentRole)) return
         if (window.location.pathname !== '/Admin%20Dashboard.html') {
@@ -133,11 +139,6 @@ function App() {
         return () => { cancelled = true }
     }, [isAuthenticated, currentUser?.id, currentUser?.role, educationProfileLoadAttempt])
     useEffect(() => {
-        if (!isAuthenticated || currentUser?.role !== 'student' || educationProfileLoading || educationProfileError) return
-        const path = classDashboardPath(educationProfile)
-        if (path && window.location.pathname !== path) window.location.replace(path)
-    }, [isAuthenticated, currentUser?.role, educationProfile, educationProfileLoading, educationProfileError])
-    useEffect(() => {
         if (!isAuthenticated || currentUser?.role !== 'student') return
         api.learningSummary().then((result) => setLearningSummary(result.data)).catch(() => setLearningSummary(null))
     }, [isAuthenticated, currentUser?.id, currentUser?.role])
@@ -155,42 +156,31 @@ function App() {
         }).catch(() => { setLearningDashboard(null); setAvailableCourses([]) })
     }, [isAuthenticated, currentUser?.id, currentUser?.role, educationProfile?.education_level_id, educationProfile?.grade_id, educationProfile?.program_id])
     useEffect(() => {
-        if (!isAuthenticated || currentUser?.role !== 'student' || educationProfile?.education_level_name?.toLowerCase() !== 'tvet' || !educationProfile.program_id || !educationProfile.grade_id) return
+        if (!isAuthenticated || currentUser?.role !== 'student' || dashboardCategory !== 'tvet' || !profileProgramId || !profileGradeId) return
         api.tvetDashboard().then((result) => setTvetDashboard(result.data)).catch(() => setTvetDashboard(null))
-    }, [isAuthenticated, currentUser?.id, currentUser?.role, educationProfile?.education_level_name, educationProfile?.grade_id, educationProfile?.program_id])
+    }, [isAuthenticated, currentUser?.id, currentUser?.role, dashboardCategory, profileGradeId, profileProgramId])
     useEffect(() => {
-        if (!isAuthenticated || currentUser?.role !== 'student' || educationProfile?.education_level_name?.toLowerCase() !== 'university' || !educationProfile.program_id) return
+        if (!isAuthenticated || currentUser?.role !== 'student' || dashboardCategory !== 'university' || !profileProgramId) return
         api.universityDashboard().then((result) => setUniversityDashboard(result.data)).catch(() => setUniversityDashboard(null))
-    }, [isAuthenticated, currentUser?.id, currentUser?.role, educationProfile?.education_level_name, educationProfile?.program_id])
+    }, [isAuthenticated, currentUser?.id, currentUser?.role, dashboardCategory, profileProgramId])
     useEffect(() => { const timer = window.setTimeout(() => setIsBooting(false), 280); return () => window.clearTimeout(timer) }, [])
 
     async function logout() { try { await api.logout() } finally { clearSessionData(); setCurrentUser(null); setIsAuthenticated(false); setShowEducationOnboarding(false); setView('dashboard') } }
     async function changeLearningPath() {
-        setShowEducationOnboarding(true)
-        try {
-            await api.resetEducationProfile()
-            setEducationProfile(null)
-            setLearningDashboard(null)
-            setTvetDashboard(null)
-            setUniversityDashboard(null)
-            localStorage.removeItem('edusphere-education-profile-complete')
-            localStorage.removeItem('edusphere-education-level')
-            localStorage.removeItem('edusphere-education-grade')
-            localStorage.removeItem('edusphere-education-program')
-        } catch { /* Keep the current learning path when reset fails. */ }
+        window.alert('Your school assigns your class and program. Contact your school administrator to request a correction or transfer.')
     }
     async function completeEducationOnboarding() {
         const result = await api.educationProfile()
-        if (!hasCompleteEducationProfile(result.data)) throw new Error('Your selected class could not be verified. Please try again.')
         setEducationProfile(result.data)
-        setShowEducationOnboarding(false)
+        setShowEducationOnboarding(!hasCompleteEducationProfile(result.data))
     }
 
     if (!isAuthenticated) return teacherLogin ? <TeacherLoginScreen onBack={() => setTeacherLogin(false)} onSuccess={(session) => { acceptSession(session); setTeacherLogin(false) }} /> : <HtmlLoginScreen onTeacherLogin={() => setTeacherLogin(true)} onSuccess={acceptSession} />
     if (isBooting) return <LoadingScreen />
+    if (currentRole && canAccessAdmin(currentRole) && window.location.pathname !== '/Admin%20Dashboard.html') return <LoadingScreen />
     if (currentUser?.role === 'student' && educationProfileLoading) return <LoadingScreen />
     if (currentUser?.role === 'student' && educationProfileError) return <main className="education-onboarding"><div className="education-onboarding-glow" /><section className="education-onboarding-content"><div className="education-intro"><h1>Your class could not be loaded.</h1><p role="alert">{educationProfileError}</p><button className="education-continue" onClick={() => { setEducationProfileError(''); setEducationProfileLoading(true); setEducationProfileLoadAttempt((attempt) => attempt + 1) }}>Try again</button></div></section></main>
-    if (showEducationOnboarding) return <EducationOnboarding onComplete={completeEducationOnboarding} />
+    if (showEducationOnboarding) return <EducationOnboarding initialProfile={educationProfile} onComplete={completeEducationOnboarding} />
 
     const filteredCourses = availableCourses.filter((course) => {
         const matchesQuery = `${course.title} ${course.category} ${course.teacher}`.toLowerCase().includes(query.toLowerCase())
@@ -202,11 +192,10 @@ function App() {
     const openAssessment = (mode: AssessmentMode) => { setAssessmentMode(mode); setView('assessment'); setMobileMenu(false) }
     const saveAssessmentResult = (result: AssessmentResult) => { setAssessmentResult(result); localStorage.setItem('edusphere-last-result', JSON.stringify(result)); setView('results') }
     const nav = (nextView: View) => { setView(nextView); setMobileMenu(false) }
-
     return <div className="app-shell">
         <aside className={`sidebar ${mobileMenu ? 'is-open' : ''}`}><div className="brand"><span className="brand-mark"><Sparkles size={18} /></span><span>Edu<span>Sphere</span></span></div><button className="mobile-close icon-button" aria-label="Close menu" onClick={() => setMobileMenu(false)}><X size={20} /></button><div className="profile-card"><div className="avatar">{(currentUser?.fullName || 'S').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><strong>{currentUser?.fullName || 'Student'}</strong><span>{view === 'teacher' ? 'Teacher account' : 'Student account'}</span></div><button className="more-button" aria-label="Profile options"><MoreHorizontal size={17} /></button></div><nav className="main-nav" aria-label="Main navigation"><p className="nav-label">Workspace</p><NavButton icon={<LayoutDashboard size={18} />} label={view === 'teacher' ? 'Teacher home' : 'Overview'} active={view === 'dashboard' || view === 'teacher'} onClick={() => view === 'teacher' ? setTeacherTab('Overview') : nav('dashboard')} /><NavButton icon={<BookOpen size={18} />} label="My learning" active={view === 'course' || view === 'lesson'} count="3" onClick={() => nav('course')} /><NavButton icon={<Target size={18} />} label="Explore subjects" active={view === 'subjects'} onClick={() => nav('subjects')} /><NavButton icon={<CalendarDays size={18} />} label="Calendar" onClick={() => nav(view === 'teacher' ? 'teacher' : 'dashboard')} /><p className="nav-label secondary-label">Community</p><NavButton icon={<Trophy size={18} />} label="Achievements" onClick={() => nav('dashboard')} /><NavButton icon={<Users size={18} />} label="Study groups" onClick={() => nav('dashboard')} /></nav><div className="sidebar-bottom"><button><Settings size={18} />Settings</button><button onClick={() => void logout()}><LogIn size={18} />Sign out</button><div className="help-card"><div className="help-icon"><Sparkles size={17} /></div><strong>Need a little help?</strong><span>Explore our learning guide.</span><button className="help-link">View guide <ArrowRight size={14} /></button></div><div className="sidebar-footer"><span>EduSphere v1.0</span><button aria-label="More options"><MoreHorizontal size={17} /></button></div></div></aside>
         <main className="main-content"><header className="topbar"><button className="mobile-menu icon-button" aria-label="Open menu" onClick={() => setMobileMenu(true)}><Menu size={22} /></button><div className="breadcrumb"><span>{view === 'teacher' ? 'Teacher workspace' : 'Workspace'}</span><ChevronRight size={14} /><strong>{view === 'dashboard' ? 'Overview' : view === 'subjects' ? 'Explore subjects' : view === 'course' ? activeCourse?.title || 'Learning path' : view === 'teacher' ? teacherTab : 'Lesson'}</strong></div><div className="top-actions"><label className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses..." aria-label="Search courses" /><kbd>⌘ K</kbd></label><button className="icon-button" aria-label="Toggle dark mode" onClick={() => setDarkMode(!darkMode)}>{darkMode ? <Sun size={19} /> : <Moon size={19} />}</button><button className="icon-button notification-button" aria-label="Show notifications" onClick={() => setNotifications(!notifications)}><Bell size={19} /><i /></button><button className="small-avatar">{(currentUser?.fullName || 'S').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button></div>{notifications && <div className="notification-popover"><strong>Notifications</strong><p>{view === 'teacher' ? 'Review your latest submissions.' : 'Check your published learning activity.'}</p></div>}</header>
-            {view === 'dashboard' && (educationProfile?.education_level_name?.toLowerCase() === 'tvet' ? <TvetDashboard data={tvetDashboard} loading={!tvetDashboard} onChangeLearningPath={changeLearningPath} /> : educationProfile?.education_level_name?.toLowerCase() === 'university' ? <UniversityDashboard data={universityDashboard} loading={!universityDashboard} onChangeLearningPath={changeLearningPath} /> : <StudentDashboard userName={currentUser?.fullName || 'Student'} courses={availableCourses} subjects={learningDashboard?.subjects || []} summary={learningSummary} profile={educationProfile} onExplore={() => nav('subjects')} onOpenCourse={openCourse} query={query} onQueryChange={setQuery} onChangeLearningPath={changeLearningPath} />)}
+            {view === 'dashboard' && (dashboardCategory === 'tvet' ? <TvetDashboard data={tvetDashboard} loading={!tvetDashboard} onChangeLearningPath={changeLearningPath} /> : dashboardCategory === 'university' ? <UniversityDashboard data={universityDashboard} loading={!universityDashboard} onChangeLearningPath={changeLearningPath} /> : <StudentDashboard category={dashboardCategory} userName={currentUser?.fullName || 'Student'} courses={availableCourses} subjects={learningDashboard?.subjects || []} learningDashboard={learningDashboard} summary={learningSummary} profile={educationProfile} onExplore={() => nav('subjects')} onOpenCourse={openCourse} onChangeLearningPath={changeLearningPath} />)}
             {view === 'subjects' && <SubjectPage courses={filteredCourses} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onOpenCourse={openCourse} />}
             {view === 'course' && activeCourse && <LearningPath courseId={activeCourse.id} fallbackTitle={activeCourse.title} fallbackCategory={activeCourse.category} fallbackDescription={activeCourse.description} fallbackTeacher={activeCourse.teacher} color={activeCourse.color} icon={activeCourse.icon} onBack={() => nav('subjects')} onLesson={openLesson} />}
             {view === 'lesson' && activeCourse && <LessonWorkspace courseId={activeCourse.id} lessonId={activeLessonId} courseTitle={activeCourse.title} onBack={() => nav('course')} onAssessment={openAssessment} />}

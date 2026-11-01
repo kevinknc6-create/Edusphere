@@ -291,6 +291,7 @@ td.actions .icon-btn{width:34px;height:34px}
   .sidebar.open{transform:none;box-shadow:0 0 60px rgba(0,0,0,.5)}
   .content{margin-left:0}
   .menu-btn{display:inline-grid}
+  .gsearch{min-width:0}
   .topbar{padding:0 14px}
   main{padding:20px 14px 10px}
   footer.foot{padding:16px 14px 22px}
@@ -576,7 +577,11 @@ async function connectSystem(){
 }
 function showSystemError(message){
   systemReady=false;systemError=message;
-  $('#view').innerHTML=`<section class="card card-pad" role="alert"><h1 id="pageTitle" tabindex="-1">Dashboard unavailable</h1><p class="sub" style="margin-top:10px">${esc(message)}</p><p style="margin-top:18px"><a class="btn primary" href="/">Return to EduSphere sign in</a></p></section>`;
+  const signInRequired=/authentication required|session has expired|administrator sign-in is required/i.test(message);
+  const heading=signInRequired?'Admin sign-in required':'Dashboard unavailable';
+  const description=signInRequired?'Your administrator session is missing or expired. Sign in with an admin account here; you will be returned to the dashboard automatically.':message;
+  const linkLabel=signInRequired?'Sign in to EduSphere':'Return to EduSphere sign in';
+  $('#view').innerHTML=`<section class="card card-pad" role="alert"><h1 id="pageTitle" tabindex="-1">${heading}</h1><p class="sub" style="margin-top:10px">${esc(description)}</p><p style="margin-top:18px"><a class="btn primary" href="/">${linkLabel}</a></p></section>`;
 }
 async function refreshSystem(){
   try{await connectSystem();applyBranding();render();toast('Live EduSphere data refreshed.');}
@@ -808,6 +813,7 @@ function unreadNotifs(){return DB.notifications.filter(n=>!n.read).length;}
    ===================================================================== */
 const PAGES={
  dashboard:{label:'Dashboard',icon:'home',render:renderDashboard},
+ 'learning-materials':{label:'Learning Materials',icon:'book',render:renderLearningMaterials},
  students:{label:'Students',icon:'users',render:()=>renderEntity('students')},
  teachers:{label:'Teachers',icon:'user',render:()=>renderEntity('teachers')},
  schools:{label:'Schools',icon:'school',render:()=>renderEntity('schools')},
@@ -821,6 +827,9 @@ const PAGES={
  settings:{label:'Settings',icon:'gear',render:renderSettings}
 };
 let currentPage='dashboard';
+function renderLearningMaterials(){
+  $('#view').innerHTML='<div class="page-head"><div><h1 id="pageTitle" tabindex="-1">Learning Materials</h1><p class="sub">Upload, organize and publish approved learning materials.</p></div></div><iframe id="learningMaterialsFrame" title="Learning Materials Management" src="/admin-learning-materials.html" style="display:block;width:100%;height:800px;border:0;background:transparent"></iframe>';
+}
 function pageFromHash(){const p=(location.hash||'').replace('#','');return PAGES[p]?p:'dashboard';}
 function buildNav(){
   $('#nav').innerHTML=Object.keys(PAGES).map(k=>`<a href="#${k}" data-page="${k}">${icon(PAGES[k].icon,22)}<span>${PAGES[k].label}</span>${k==='messages'?'<span class="nbadge" id="navMsgBadge" hidden></span>':''}</a>`).join('');
@@ -1419,6 +1428,12 @@ async function init(){
     const t=e.target;
     if(t.dataset&&t.dataset.filter){const k=$('#view').dataset.ent;UI[k].f[t.dataset.filter]=t.value;UI[k].page=1;drawTable(k);}
     else if(t.id==='metric')drawLine(t.value);
+  });
+  window.addEventListener('message',e=>{
+    const frame=$('#learningMaterialsFrame');
+    const data=e.data;
+    if(!frame||e.source!==frame.contentWindow||e.origin!==location.origin||!data||data.type!=='edusphere-admin-materials:height'||typeof data.height!=='number'||!Number.isFinite(data.height)||data.height<0)return;
+    frame.style.height=`${Math.min(12000,Math.max(600,Math.ceil(data.height)))}px`;
   });
   currentPage=pageFromHash();
   try{await connectSystem();applyBranding();render();}

@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react'
-import { ArrowRight, Award, Bell, BookOpen, CalendarDays, CheckCircle2, ChevronRight, Clock3, Flame, GraduationCap, House, Menu, Play, Search, Send, Settings2, Sparkles, Target, Trophy, Users } from 'lucide-react'
-import { api, type EducationProfile, type LearningSummary } from '../lib/api'
+import { ArrowRight, Award, BookOpen, ClipboardCheck, FileText, GraduationCap, Layers3, NotebookText, Play, Target } from 'lucide-react'
+import type { EducationProfile, LearningDashboard, LearningSummary } from '../lib/api'
+import StudentAiTutor from './StudentAiTutor'
+import StudentLearningMaterials from './StudentLearningMaterials'
 
 type StudentCourse = {
     id: string | number
@@ -15,105 +16,131 @@ type StudentCourse = {
     description: string
 }
 
-type StudentDashboardProps = {
+type Props = {
     userName: string
     courses: StudentCourse[]
     subjects: Array<{ id: string | number; name: string; description: string }>
+    learningDashboard: LearningDashboard | null
     onExplore: () => void
     onOpenCourse: (course: StudentCourse) => void
-    query: string
-    onQueryChange: (query: string) => void
     summary: LearningSummary | null
     profile: EducationProfile | null
     onChangeLearningPath: () => void
+    category: 'primary' | 'secondary'
 }
 
-const recentLessons = [
-    { title: 'Solving one-step equations', subject: 'Algebra foundations', duration: '22 min', progress: 78, color: 'mint' },
-    { title: 'The balance method', subject: 'Algebra foundations', duration: '14 min', progress: 100, color: 'sun' },
-    { title: 'Forces and motion', subject: 'Introduction to physics', duration: '18 min', progress: 36, color: 'sky' },
-]
+const primarySections = [
+    { title: 'Lessons', detail: 'Teacher-published lessons for your class', key: 'courses', Icon: Play },
+    { title: 'Learning materials', detail: 'Textbooks and resources assigned to your class', key: 'materials', Icon: BookOpen },
+    { title: 'Practice', detail: 'Exercises available in your learning materials', key: 'exercises', Icon: Target },
+    { title: 'Quizzes', detail: 'Check what you have learned', key: 'quizzes', Icon: ClipboardCheck },
+] as const
 
-const upcomingWork = [
-    { type: 'Quiz', title: 'Practice: equations', detail: 'Algebra foundations', due: 'Due today', color: 'coral' },
-    { type: 'Test', title: 'Motion and energy check', detail: 'Introduction to physics', due: 'Tomorrow', color: 'sky' },
-    { type: 'Homework', title: 'Build a landing page', detail: 'Modern web development', due: 'Sep 24', color: 'violet' },
-]
+const secondarySections = [
+    { title: 'Lessons and units', detail: 'Published lessons for your class', key: 'courses', Icon: Layers3 },
+    { title: 'Notes and textbooks', detail: 'Study materials assigned to your learning', key: 'materials', Icon: NotebookText },
+    { title: 'Quizzes and tests', detail: 'Published assessments for your subjects', key: 'assessments', Icon: ClipboardCheck },
+    { title: 'Assignments and exams', detail: 'Preparation based on assigned class content', key: 'work', Icon: GraduationCap },
+] as const
 
-export default function StudentDashboard({ userName, courses, subjects, onExplore, onOpenCourse, query, onQueryChange, summary, profile, onChangeLearningPath }: StudentDashboardProps) {
-    const [aiQuestion, setAiQuestion] = useState('')
-    const [aiAnswer, setAiAnswer] = useState('')
-    const [aiBusy, setAiBusy] = useState(false)
-    const [aiError, setAiError] = useState('')
-    const initials = userName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
-    const activeCourses = courses.filter((course) => course.progress > 0 && course.progress < 100)
-    const continueCourse = activeCourses[0] || courses[0]
-    const score = summary?.scores.find((item) => item.type === 'quiz')?.average_score || 0
-    const learningPath = `${profile?.program_name || profile?.grade_name || profile?.education_level_name || 'Your learning path'} · ${score}% quiz average`
+function countFor(key: string, data: LearningDashboard | null, courses: StudentCourse[]) {
+    if (key === 'courses') return courses.length
+    if (!data) return 0
+    if (key === 'materials') return data.materials.length + data.notes.length
+    if (key === 'assessments') return data.quizzes.length + data.tests.length + data.exams.length
+    if (key === 'work') return data.homework.length + data.exams.length
+    return Array.isArray(data[key as keyof LearningDashboard]) ? (data[key as keyof LearningDashboard] as unknown[]).length : 0
+}
 
-    async function askAi(event: FormEvent) {
-        event.preventDefault()
-        if (!aiQuestion.trim()) return
-        setAiBusy(true)
-        setAiError('')
-        try {
-            const result = await api.aiChat({ message: aiQuestion, educationLevel: localStorage.getItem('edusphere-education-level') || 'Secondary 5' })
-            setAiAnswer(result.data.answer)
-            setAiQuestion('')
-        } catch (error) {
-            setAiError(error instanceof Error ? error.message : 'Edusphere AI is temporarily unavailable.')
-        } finally {
-            setAiBusy(false)
-        }
-    }
+export default function StudentDashboard({ userName, courses, subjects, learningDashboard, onExplore, onOpenCourse, summary, profile, onChangeLearningPath, category }: Props) {
+    const isPrimary = category === 'primary'
+    const firstName = userName.trim().split(/\s+/)[0] || 'learner'
+    const className = profile?.grade_name || profile?.education_level_name || 'Class not set'
+    const schoolName = profile?.school_name
+    const curriculum = learningDashboard?.curriculum || []
+    const sections = isPrimary ? primarySections : secondarySections
+    const progress = Math.max(0, Math.min(100, summary?.overallProgress || 0))
 
-    return <div className="student-dashboard">
-        <div className="student-mobile-header">
-            <button className="student-icon-button" aria-label="Open navigation"><Menu size={20} /></button>
-            <div className="student-brand"><span><Sparkles size={15} /></span>Edu<span>Sphere</span></div>
-            <button className="student-avatar" aria-label="Open profile">{initials || 'S'}</button>
-        </div>
-
+    return <div className={`student-dashboard curriculum-dashboard ${isPrimary ? 'primary-learning-dashboard' : 'secondary-learning-dashboard'}`}>
         <header className="student-dashboard-header">
             <div>
-                <p className="student-kicker">Thursday, September 17, 2026 <span className="student-live-dot" /> {learningPath}</p>
-                <h1>Good morning, {userName.split(' ')[0] || 'student'}.</h1>
-                <p className="student-header-copy">Make a little progress today. It adds up faster than you think.</p>
+                <p className="student-kicker">{isPrimary ? 'My learning space' : 'My academic workspace'} <span className="student-live-dot" /> {className}</p>
+                <h1>{isPrimary ? `Hello, ${firstName}!` : `Welcome back, ${firstName}.`}</h1>
+                <p className="student-header-copy">{isPrimary ? 'Explore the lessons and activities your school has shared.' : 'Your class learning, subject resources and progress in one place.'}</p>
             </div>
             <div className="student-header-actions">
-                <button className="student-icon-button" aria-label="Notifications"><Bell size={19} /><i /></button>
-                <button className="student-icon-button" aria-label={profile?.education_level_id ? 'Change learning path' : 'Set up learning path'} title={profile?.education_level_id ? 'Change learning path' : 'Set up learning path'} onClick={onChangeLearningPath}><Settings2 size={19} /></button>
-                <button className="student-profile-button"><span className="student-avatar">{initials || 'S'}</span><span><strong>{userName}</strong><small>Student profile</small></span><ChevronRight size={16} /></button>
+                <button className="student-explore-button" onClick={onChangeLearningPath}>Learning profile</button>
             </div>
         </header>
 
-        <section className="student-command-row">
-            <div className="student-ai-card">
-                <div className="student-ai-orbit" aria-hidden="true"><Sparkles size={25} /></div>
-                <div className="student-ai-copy"><span className="student-section-label"><Sparkles size={13} /> Edusphere AI</span><h2>What are you curious about?</h2><p>Get a clear explanation, a worked example, or a practice plan for your next lesson.</p><form className="student-ai-form" onSubmit={askAi}><input value={aiQuestion} onChange={(event) => setAiQuestion(event.target.value)} placeholder="Ask your learning assistant..." aria-label="Ask Edusphere AI" /><button disabled={aiBusy || !aiQuestion.trim()} aria-label="Ask Edusphere AI">{aiBusy ? <Clock3 size={17} /> : <Send size={17} />}</button></form>{aiError && <small className="student-ai-error">{aiError}</small>}{aiAnswer && <div className="student-ai-answer"><strong>Edusphere AI</strong><p>{aiAnswer}</p></div>}</div>
-                <div className="student-ai-prompts"><button onClick={() => setAiQuestion('Explain my current lesson simply')}>Explain simply</button><button onClick={() => setAiQuestion('Give me a practice question')}>Practice with me</button></div>
+        <section className="curriculum-overview" aria-label="My class">
+            <div className="curriculum-overview-icon"><GraduationCap size={24} /></div>
+            <div>
+                <span className="student-section-label">My class</span>
+                <h2>{className}</h2>
+                <p>{schoolName || 'School not linked to this account'}{profile?.subject_combination_name ? ` · ${profile.subject_combination_name}` : ''}</p>
             </div>
-            <div className="student-streak-card"><div className="student-streak-icon"><Flame size={20} /></div><span className="student-section-label">Your rhythm</span><strong>{summary?.learningStreak || 0} day streak</strong><p>One focused session keeps your momentum alive.</p><div className="student-week"><i /><i /><i /><i /><i className="today" /><i /><i /></div><small>Keep returning to build your streak.</small></div>
+            <div className="curriculum-overview-progress" aria-label={`Learning progress ${progress}%`}>
+                <span>{progress}%</span><div className="student-progress"><i style={{ width: `${progress}%` }} /></div><small>Learning progress</small>
+            </div>
         </section>
-
-        <div className="student-search-row"><label><Search size={18} /><input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search your courses, lessons, and subjects" /><kbd>⌘ K</kbd></label><button className="student-explore-button" onClick={onExplore}>Explore all subjects <ArrowRight size={16} /></button></div>
 
         <section className="student-section-block">
-            <div className="student-section-heading"><div><span className="student-section-label">My learning</span><h2>Pick up where you left off</h2></div><button onClick={onExplore}>View all learning <ArrowRight size={15} /></button></div>
-            <div className="student-learning-grid">
-                <article className="student-continue-card" onClick={() => continueCourse && onOpenCourse(continueCourse)}><div className={`student-course-art ${continueCourse?.color || 'coral'}`}><span>{continueCourse?.icon || 'x'}</span><em>Continue learning</em><button aria-label="Play course"><Play size={18} fill="currentColor" /></button></div><div className="student-continue-body"><div><span>{continueCourse?.category || 'Mathematics'}</span><h3>{continueCourse?.title || 'Algebra foundations'}</h3><p>Lesson 3 · Solving one-step equations</p></div><strong>{continueCourse?.progress || 0}%</strong><div className="student-progress"><i style={{ width: `${continueCourse?.progress || 0}%` }} /></div><small><Clock3 size={14} /> 22 min remaining in this lesson</small></div></article>
-                <div className="student-progress-card"><div className="student-card-heading"><span className="student-section-label">Progress</span><Target size={19} /></div><div className="student-progress-number"><strong>86%</strong><span>average score</span></div><div className="student-progress-lines"><span><i className="blue" style={{ width: '86%' }} />Course mastery</span><span><i className="green" style={{ width: '74%' }} />Completion rate</span><span><i className="orange" style={{ width: '62%' }} />Weekly goal</span></div><button>See your progress <ArrowRight size={14} /></button></div>
+            <div className="student-section-heading">
+                <div><span className="student-section-label">My subjects</span><h2>{isPrimary ? 'Subjects for your class' : 'Your subjects and combinations'}</h2></div>
+                <button onClick={onExplore}>Explore learning <ArrowRight size={15} /></button>
+            </div>
+            {subjects.length ? <div className="curriculum-subject-grid">
+                {subjects.map((subject) => <article className="curriculum-subject-card" key={subject.id}>
+                    <span className="curriculum-subject-icon"><BookOpen size={19} /></span>
+                    <div><h3>{subject.name}</h3><p>{subject.description || (isPrimary ? 'Open available class learning materials.' : 'Open published lessons and resources.')}</p></div>
+                </article>)}
+            </div> : <div className="curriculum-empty">
+                <BookOpen size={22} />
+                <p>{isPrimary ? 'Your school has not assigned subjects or materials here yet.' : 'No subjects have been assigned to your account yet.'}</p>
+                <small>Only learning content configured for your account will appear.</small>
+            </div>}
+        </section>
+
+        <section className="student-section-block">
+            <div className="student-section-heading"><div><span className="student-section-label">{isPrimary ? 'Learn and practise' : 'Study and prepare'}</span><h2>{isPrimary ? 'Your learning activities' : 'Your class learning'}</h2></div></div>
+            <div className="curriculum-activity-grid">
+                {sections.map(({ title, detail, key, Icon }) => {
+                    const count = countFor(key, learningDashboard, courses)
+                    return <article className="curriculum-activity-card" key={key}>
+                        <span className="curriculum-activity-icon"><Icon size={20} /></span>
+                        <div><h3>{title}</h3><p>{detail}</p><small>{count} {count === 1 ? 'item' : 'items'} available</small></div>
+                    </article>
+                })}
             </div>
         </section>
 
-        <section className="student-section-block"><div className="student-section-heading"><div><span className="student-section-label">My courses</span><h2>Learning paths in motion</h2></div><button onClick={onExplore}>Browse courses <ArrowRight size={15} /></button></div><div className="student-course-grid">{courses.slice(0, 3).map((course) => <article className="student-course-card" key={course.id} onClick={() => onOpenCourse(course)}><div className={`student-course-thumb ${course.color}`}><span>{course.icon}</span><small>{course.difficulty}</small></div><div className="student-course-card-body"><span>{course.category}</span><h3>{course.title}</h3><p>with {course.teacher}</p><div className="student-course-card-footer"><div className="student-progress"><i style={{ width: `${course.progress}%` }} /></div><strong>{course.progress}%</strong></div><small><BookOpen size={13} /> {course.lessons} lessons</small></div></article>)}</div></section>
+        {learningDashboard && (learningDashboard.units.length > 0 || learningDashboard.outcomes.length > 0) && <section className="student-section-block">
+            <div className="student-section-heading"><div><span className="student-section-label">Verified curriculum</span><h2>{isPrimary ? 'What you will learn' : 'Learning units and outcomes'}</h2></div></div>
+            <div className="curriculum-activity-grid">
+                {learningDashboard.units.map((unit) => <article className="curriculum-activity-card" key={`unit-${unit.id}`}><span className="curriculum-activity-icon"><Layers3 size={20} /></span><div><h3>{unit.title}</h3><p>{unit.subject_name}</p>{unit.description && <small>{unit.description}</small>}</div></article>)}
+                {learningDashboard.outcomes.map((outcome) => <article className="curriculum-activity-card" key={`outcome-${outcome.id}`}><span className="curriculum-activity-icon"><Target size={20} /></span><div><h3>{outcome.unit_title}</h3><p>{outcome.description}</p></div></article>)}
+            </div>
+        </section>}
 
-        <section className="student-two-column"><div className="student-panel"><div className="student-section-heading compact"><div><span className="student-section-label">Recent lessons</span><h2>Small wins</h2></div><button>View history <ArrowRight size={14} /></button></div><div className="student-lesson-list">{recentLessons.map((lesson) => <button className="student-lesson-row" key={lesson.title}><span className={`student-lesson-icon ${lesson.color}`}><Play size={14} fill="currentColor" /></span><span><strong>{lesson.title}</strong><small>{lesson.subject} · {lesson.duration}</small></span><span className="student-lesson-progress"><i style={{ width: `${lesson.progress}%` }} /></span><b>{lesson.progress}%</b><ChevronRight size={16} /></button>)}</div></div><div className="student-panel student-subject-panel"><div className="student-section-heading compact"><div><span className="student-section-label">Subjects</span><h2>Explore by interest</h2></div><button onClick={onExplore} aria-label="View subjects"><ArrowRight size={15} /></button></div><div className="student-subject-list">{subjects.slice(0, 6).map((subject, index) => <button key={subject.id} onClick={onExplore}><span className={`subject-dot ${['coral', 'sky', 'violet', 'mint'][index % 4]}`}>{subject.name.slice(0, 2)}</span><span><strong>{subject.name}</strong><small>Explore learning</small></span><ChevronRight size={15} /></button>)}{!subjects.length && <small>No curriculum subjects are published for this learning path yet.</small>}</div></div></section>
+        <section className="student-section-block">
+            <div className="student-section-heading"><div><span className="student-section-label">Published learning</span><h2>{isPrimary ? 'Lessons and materials' : 'Lessons, notes and examination preparation'}</h2></div></div>
+            <StudentLearningMaterials materials={learningDashboard?.materials || []} />
+            {courses.length ? <div className="student-course-grid curriculum-course-grid">
+                {courses.map((course) => <article className="student-course-card" key={course.id}>
+                    <div className="student-course-thumb sky"><BookOpen size={22} /><small>{course.lessons} {course.lessons === 1 ? 'lesson' : 'lessons'}</small></div>
+                    <div className="student-course-card-body"><span>{course.category}</span><h3>{course.title}</h3><p>{course.description || 'A learning resource shared for your class.'}</p>
+                        <button className="curriculum-open-button" onClick={() => onOpenCourse(course)}>Open learning <ArrowRight size={15} /></button>
+                    </div>
+                </article>)}
+            </div> : <div className="curriculum-empty"><FileText size={22} /><p>No published learning materials are available for this class yet.</p><small>Your dashboard will update when your school or teacher publishes content.</small></div>}
+        </section>
 
-        <section className="student-section-block student-work-section"><div className="student-section-heading"><div><span className="student-section-label">Your study desk</span><h2>Stay ready for what is next</h2></div><button>Open calendar <CalendarDays size={15} /></button></div><div className="student-work-grid">{upcomingWork.map((work) => <article className="student-work-card" key={work.title}><div className={`student-work-mark ${work.color}`}><CheckCircle2 size={17} /></div><div><span>{work.type}</span><h3>{work.title}</h3><p>{work.detail}</p></div><small>{work.due}</small><button aria-label={`Open ${work.title}`}><ArrowRight size={15} /></button></article>)}</div></section>
+        <StudentAiTutor primary={isPrimary} />
 
-        <section className="student-bottom-row"><div className="student-achievement-banner"><div className="student-trophy"><Trophy size={22} /></div><div><span className="student-section-label">Achievements</span><h2>Keep building your collection</h2><p>You are one lesson away from unlocking <strong>Curious mind</strong>.</p></div><button>View achievements <Award size={16} /></button></div><div className="student-community-card"><Users size={19} /><div><strong>Study groups</strong><span>Find learners on the same path</span></div><ArrowRight size={16} /></div></section>
-
-        <footer className="student-dashboard-footer"><span><GraduationCap size={17} /> Learning is a journey, not a race.</span><span><House size={14} /> EduSphere student workspace</span></footer>
+        {curriculum.length > 0 && <details className="curriculum-sources">
+            <summary><Award size={17} /> Curriculum references ({curriculum.length})</summary>
+            <ul>{curriculum.map((item) => <li key={item.id}><strong>{item.name}</strong> — {item.authority}: <a href={item.source_url} target="_blank" rel="noreferrer">{item.source_title}</a>{item.version_label ? ` (${item.version_label})` : ''}</li>)}</ul>
+        </details>}
     </div>
 }

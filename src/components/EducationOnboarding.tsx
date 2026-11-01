@@ -1,80 +1,84 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, BookOpen, Check, GraduationCap, LoaderCircle, School, Sparkles } from 'lucide-react'
-import { api, type EducationTaxonomy } from '../lib/api'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { LoaderCircle, School, Sparkles } from 'lucide-react'
+import { api, type EducationProfile, type EducationTaxonomy } from '../lib/api'
 
-type EducationOnboardingProps = { onComplete: () => Promise<void> }
-type Category = 'primary' | 'secondary' | 'tvet' | 'university'
+type SchoolOption = { id: string; name: string }
+type EducationOnboardingProps = { onComplete: () => Promise<void>; initialProfile?: EducationProfile | null }
 
-const categories: Array<{ id: Category; label: string; description: string; icon: typeof School }> = [
-    { id: 'primary', label: 'Primary', description: 'Build a strong foundation for curious young learners.', icon: School },
-    { id: 'secondary', label: 'Secondary', description: 'Strengthen your skills and prepare for what comes next.', icon: BookOpen },
-    { id: 'tvet', label: 'TVET / SOD', description: 'Learn practical skills for work, craft, and technology.', icon: GraduationCap },
-    { id: 'university', label: 'University', description: 'Shape a focused path around your field and program.', icon: Sparkles },
-]
-
-function categoryForLevel(level: { name: string; code: string }): Category | null {
-    const value = `${level.code} ${level.name}`.toLowerCase()
-    if (value.includes('primary')) return 'primary'
-    if (value.includes('secondary') || value.includes('senior')) return 'secondary'
-    if (value.includes('tvet') || value.includes('sod') || /(^|[^a-z])l[345]([^a-z]|$)/.test(value)) return 'tvet'
-    if (value.includes('university') || value.includes('higher')) return 'university'
-    return null
+function isUniversity(level?: EducationTaxonomy['levels'][number]) {
+    return `${level?.category || ''} ${level?.name || ''}`.toLowerCase().includes('university')
+        || `${level?.category || ''} ${level?.name || ''}`.toLowerCase().includes('higher')
 }
 
-export default function EducationOnboarding({ onComplete }: EducationOnboardingProps) {
+function isTvet(level?: EducationTaxonomy['levels'][number], gradeName = '') {
+    return `${level?.category || ''} ${level?.name || ''}`.toLowerCase().includes('tvet')
+        || `${level?.category || ''} ${level?.name || ''}`.toLowerCase().includes('sod')
+        || /\bl[345]\b/i.test(gradeName)
+        || /\bl[345]\b/i.test(level?.code || '')
+        || /\bl[345]\b/i.test(level?.name || '')
+}
+
+export default function EducationOnboarding({ onComplete, initialProfile }: EducationOnboardingProps) {
     const [taxonomy, setTaxonomy] = useState<EducationTaxonomy | null>(null)
-    const [category, setCategory] = useState<Category | null>(null)
-    const [levelId, setLevelId] = useState('')
-    const [gradeId, setGradeId] = useState('')
-    const [programId, setProgramId] = useState('')
-    const [error, setError] = useState('')
+    const [schools, setSchools] = useState<SchoolOption[]>([])
+    const [schoolId, setSchoolId] = useState(initialProfile?.school_id || '')
+    const [levelId, setLevelId] = useState(initialProfile?.education_level_id || '')
+    const [gradeId, setGradeId] = useState(initialProfile?.grade_id || '')
+    const [programId, setProgramId] = useState(initialProfile?.program_id || '')
+    const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const university = category === 'university'
-    const tvet = category === 'tvet'
+    const [error, setError] = useState('')
 
     useEffect(() => {
-        api.taxonomy().then((result) => setTaxonomy(result.data)).catch(() => setError('We could not load the education options. Please try again.'))
+        let cancelled = false
+        Promise.all([api.taxonomy(), api.educationSchools()])
+            .then(([taxonomyResult, schoolResult]) => {
+                if (cancelled) return
+                setTaxonomy(taxonomyResult.data)
+                setSchools(schoolResult.data)
+            })
+            .catch((caught) => {
+                if (!cancelled) setError(caught instanceof Error ? caught.message : 'School, class and program options could not be loaded.')
+            })
+            .finally(() => { if (!cancelled) setLoading(false) })
+        return () => { cancelled = true }
     }, [])
 
-    const levels = useMemo(() => taxonomy?.levels.filter((level) => category && categoryForLevel(level) === category) || [], [taxonomy, category])
-    const grades = taxonomy?.grades.filter((grade) => grade.education_level_id === levelId) || []
-    const programs = useMemo(() => {
-        const available = taxonomy?.programs || []
-        if (tvet) return available.filter((program) => program.grade_ids?.includes(gradeId))
-        if (university) return available.filter((program) => !program.grade_ids?.length)
-        return available
-    }, [taxonomy, gradeId, tvet, university])
-    const canSave = Boolean(levelId && (!grades.length || gradeId) && (!university && !tvet || programId))
-    const step = !category ? 1 : !levelId ? 2 : tvet && !gradeId ? 3 : 3
+    const selectedLevel = taxonomy?.levels.find((level) => level.id === levelId)
+    const grades = useMemo(
+        () => taxonomy?.grades.filter((grade) => grade.education_level_id === levelId) || [],
+        [taxonomy, levelId],
+    )
+    const selectedGrade = grades.find((grade) => grade.id === gradeId)
+    const programs = useMemo(() => taxonomy?.programs.filter((program) => {
+        const gradeIds = program.grade_ids || []
+        if (!isTvet(selectedLevel, selectedGrade?.code || selectedGrade?.name || '')) {
+            return !gradeId || !gradeIds.length || gradeIds.includes(gradeId)
+        }
+        const tvetGradeIds = taxonomy.grades.filter((grade) => {
+            const level = taxonomy.levels.find((item) => item.id === grade.education_level_id)
+            return isTvet(level, grade.code || grade.name)
+        }).map((grade) => grade.id)
+        return gradeIds.length > 0 && (gradeId ? gradeIds.includes(gradeId) : gradeIds.some((id) => tvetGradeIds.includes(id)))
+    }) || [], [taxonomy, gradeId, selectedLevel, selectedGrade])
+    const university = isUniversity(selectedLevel)
+    const programRequired = university || isTvet(selectedLevel, selectedGrade?.name)
+    const gradeRequired = !university
 
-    function chooseCategory(next: Category) {
-        setCategory(next)
-        setLevelId('')
-        setGradeId('')
-        setProgramId('')
-        setError('')
-    }
-
-    function chooseLevel(next: string) {
-        setLevelId(next)
-        setGradeId('')
-        setProgramId('')
-        setError('')
-    }
-
-    async function save() {
-        if (!canSave) return
+    async function saveEducationProfile(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault()
         setSaving(true)
         setError('')
         try {
-            await api.updateEducationProfile({ educationLevelId: levelId, gradeId: gradeId || null, programId: programId || null })
-            localStorage.setItem('edusphere-education-level', levels.find((level) => level.id === levelId)?.name || 'the learner current education level')
-            localStorage.setItem('edusphere-education-grade', grades.find((grade) => grade.id === gradeId)?.name || '')
-            localStorage.setItem('edusphere-education-program', programs.find((program) => program.id === programId)?.name || '')
-            localStorage.setItem('edusphere-education-profile-complete', 'true')
+            await api.updateEducationProfile({
+                educationLevelId: levelId,
+                gradeId: gradeId || null,
+                programId: programId || null,
+                schoolId,
+            })
             await onComplete()
         } catch (caught) {
-            setError(caught instanceof Error ? caught.message : 'Your education profile could not be saved.')
+            setError(caught instanceof Error ? caught.message : 'Your school and class could not be saved.')
         } finally {
             setSaving(false)
         }
@@ -82,22 +86,57 @@ export default function EducationOnboarding({ onComplete }: EducationOnboardingP
 
     return <main className="education-onboarding">
         <div className="education-onboarding-glow" />
-        <header className="education-onboarding-header"><div className="education-brand"><span><Sparkles size={16} /></span>Edu<span>Sphere</span></div><span className="education-step">Step {step} of 3</span></header>
+        <header className="education-onboarding-header"><div className="education-brand"><span><Sparkles size={16} /></span>Edu<span>Sphere</span></div></header>
         <section className="education-onboarding-content">
-            <div className="education-intro"><span className="education-eyebrow"><Sparkles size={14} /> Personalize your learning path</span><h1>Where are you<br /><em>on your journey?</em></h1><p>Choose your education level so Edusphere can bring the right subjects, courses, and explanations closer to you.</p></div>
-            <div className="education-progress"><i className={step >= 1 ? 'active' : ''} /><i className={step >= 2 ? 'active' : ''} /><i className={step >= 3 ? 'active' : ''} /></div>
-            {!category ? <div className="education-choice-view">
-                <div className="education-section-title"><span>01</span><div><strong>Choose your education stage</strong><small>You can change this later in Settings.</small></div></div>
-                <div className="education-category-grid">{categories.map(({ id, label, description, icon: Icon }) => <button className="education-category-card" key={id} onClick={() => chooseCategory(id)}><span className={`education-category-icon ${id}`}><Icon size={22} /></span><span><strong>{label}</strong><small>{description}</small></span><ArrowRight size={17} /></button>)}</div>
-            </div> : <div className="education-choice-view">
-                <button className="education-back" onClick={() => setCategory(null)}><ArrowLeft size={15} /> Back to education stage</button>
-                <div className="education-section-title"><span>0{university ? 3 : 2}</span><div><strong>{university ? 'Choose your field and program' : tvet ? 'Choose your TVET level and program' : `Choose your ${category} class`}</strong><small>{tvet ? 'Your program determines the subjects and courses you see.' : 'This helps us tune your learning experience.'}</small></div></div>
-                {levels.length > 0 && <div className="education-level-grid">{levels.map((level) => <button className={levelId === level.id ? 'selected' : ''} key={level.id} onClick={() => chooseLevel(level.id)}><span>{level.name}</span>{levelId === level.id && <Check size={16} />}</button>)}</div>}
-                {levelId && !university && <div className="education-subchoice"><label htmlFor="education-grade">{tvet ? 'TVET level' : 'Class or grade'}</label><select id="education-grade" value={gradeId} onChange={(event) => { setGradeId(event.target.value); setProgramId('') }}><option value="">Select an option</option>{grades.map((grade) => <option key={grade.id} value={grade.id}>{grade.name}</option>)}</select></div>}
-                {levelId && (university || tvet && gradeId) && <div className="education-subchoice"><label htmlFor="education-program">{tvet ? 'TVET program' : 'Program or field'}</label><select id="education-program" value={programId} onChange={(event) => setProgramId(event.target.value)}><option value="">Select a program</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}</select>{tvet && !programs.length && <small>No programs are available for this level yet.</small>}</div>}
-                {error && <p className="education-form-error" role="alert">{error}</p>}
-                <div className="education-action-row"><button className="education-back secondary" onClick={() => setCategory(null)}>Change stage</button><button className="education-continue" disabled={!canSave || saving} onClick={save}>{saving ? <LoaderCircle size={16} className="education-spin" /> : <ArrowRight size={16} />} {saving ? 'Saving...' : 'Enter My Learning Space'}</button></div>
-            </div>}
+            <div className="education-intro">
+                <span className="education-eyebrow"><School size={14} /> Your learning profile</span>
+                <h1>Choose your<br /><em>school and class.</em></h1>
+                <p>Choose your school, education level, class and program to open your learning dashboard.</p>
+            </div>
+            <form className="education-choice-view" onSubmit={(event) => void saveEducationProfile(event)}>
+                {loading ? <p role="status"><LoaderCircle className="education-spin" size={16} /> Loading school, class and program options…</p> : <>
+                    <label className="admin-field">School
+                        <select required disabled={Boolean(initialProfile?.school_id)} value={schoolId} onChange={(event) => setSchoolId(event.target.value)}>
+                            <option value="">Choose your school</option>
+                            {schools.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}
+                        </select>
+                    </label>
+                    {initialProfile?.school_id && initialProfile.school_status !== 'active' && <p role="alert">Your assigned school is inactive. Contact an administrator.</p>}
+                    {!schools.length && <p role="alert">No active schools are available. Contact an administrator.</p>}
+                    <label className="admin-field">Education level
+                        <select required value={levelId} onChange={(event) => {
+                            setLevelId(event.target.value)
+                            setGradeId('')
+                            setProgramId('')
+                        }}>
+                            <option value="">Choose your education level</option>
+                            {(taxonomy?.levels || []).map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}
+                        </select>
+                    </label>
+                    {!taxonomy?.levels.length && <p role="alert">No education levels are configured. Contact an administrator.</p>}
+                    {!university && <label className="admin-field">Class / level
+                        <select required={gradeRequired} disabled={!levelId} value={gradeId} onChange={(event) => {
+                            setGradeId(event.target.value)
+                            setProgramId('')
+                        }}>
+                            <option value="">Choose your class</option>
+                            {grades.map((grade) => <option key={grade.id} value={grade.id}>{grade.name}</option>)}
+                        </select>
+                    </label>}
+                    {levelId && !university && !grades.length && <p role="alert">No classes are configured for this education level. Contact an administrator.</p>}
+                    {levelId && programRequired && <label className="admin-field">Program
+                        <select required={programRequired} value={programId} onChange={(event) => setProgramId(event.target.value)}>
+                            <option value="">Choose your program</option>
+                            {programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
+                        </select>
+                    </label>}
+                    {levelId && programRequired && !programs.length && <p role="alert">No programs are configured for this selection. Contact an administrator.</p>}
+                </>}
+                {error && <p role="alert">{error}</p>}
+                <button className="education-continue" type="submit" disabled={loading || saving || !taxonomy || !schools.length || !schoolId || Boolean(initialProfile?.school_id && initialProfile.school_status !== 'active')}>
+                    {saving ? <><LoaderCircle className="education-spin" size={16} /> Saving…</> : 'Continue to learning'}
+                </button>
+            </form>
         </section>
     </main>
 }

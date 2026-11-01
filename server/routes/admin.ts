@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import crypto from 'node:crypto'
+import type { PoolClient } from 'pg'
 import { z } from 'zod'
 import { pool } from '../db/pool.js'
 import { asyncHandler, HttpError } from '../errors.js'
@@ -173,6 +174,149 @@ router.get('/taxonomy', asyncHandler(async (_request, response) => {
         pool.query('SELECT id, name, description, education_level_id, grade_id FROM subjects ORDER BY name'),
     ])
     response.json({ data: { levels: levels.rows, grades: grades.rows, programs: programs.rows, subjects: subjects.rows } })
+}))
+
+const subjectNoteInput = z.object({
+    schoolId: id,
+    educationLevelId: id,
+    gradeId: id,
+    programId: id.nullable().optional(),
+    subjectId: id,
+    title: z.string().trim().min(1).max(240),
+    topic: z.string().trim().max(240).default(''),
+    body: z.string().trim().max(40_000).default(''),
+    attachmentIds: z.array(id).max(10).default([]),
+})
+
+async function validateSubjectNoteTarget(input: z.infer<typeof subjectNoteInput>) {
+    const [school, grade, subject] = await Promise.all([
+        pool.query("SELECT id FROM admin_schools WHERE id = $1 AND status = 'active'", [input.schoolId]),
+        pool.query('SELECT id FROM grades WHERE id = $1 AND education_level_id = $2', [input.gradeId, input.educationLevelId]),
+        pool.query('SELECT id FROM subjects WHERE id = $1 AND (education_level_id IS NULL OR education_level_id = $2) AND (grade_id IS NULL OR grade_id = $3)', [input.subjectId, input.educationLevelId, input.gradeId]),
+    ])
+    if (!school.rows[0]) throw new HttpError(400, 'Choose an active school')
+    if (!grade.rows[0]) throw new HttpError(400, 'The selected class does not belong to that education level')
+    if (!subject.rows[0]) throw new HttpError(400, 'The selected subject is not available for that class')
+    if (input.programId) {
+        const program = await pool.query('SELECT id FROM programs WHERE id = $1', [input.programId])
+        if (!program.rows[0]) throw new HttpError(400, 'The selected program is not available')
+    }
+}
+
+async function saveSubjectNoteAttachments(client: PoolClient, noteId: string, userId: string, attachmentIds: string[]) {
+    const existing = attachmentIds.length
+        ? await client.query('SELECT id FROM subject_note_attachments WHERE id = ANY($1::uuid[]) AND (created_by = $2 OR note_id = $3) FOR UPDATE', [attachmentIds, userId, noteId])
+        : { rows: [] }
+    if (existing.rows.length !== attachmentIds.length) throw new HttpError(400, 'One or more selected attachments are invalid')
+    if (attachmentIds.length) {
+        await client.query('DELETE FROM subject_note_attachments WHERE note_id = $1 AND NOT (id = ANY($2::uuid[]))', [noteId, attachmentIds])
+        await client.query('UPDATE subject_note_attachments SET note_id = $1 WHERE id = ANY($2::uuid[]) AND created_by = $3 AND note_id IS NULL', [noteId, attachmentIds, userId])
+    } else {
+        await client.query('DELETE FROM subject_note_attachments WHERE note_id = $1', [noteId])
+    }
+}
+
+router.get('/subject-notes', asyncHandler(async (request, response) => {
+    const input = z.object({
+        search: z.string().trim().max(120).optional(),
+        limit: z.coerce.number().int().min(1).max(200).default(100),
+        offset: z.coerce.number().int().min(0).default(0),
+    }).parse(request.query)
+    const pattern = input.search ? `%${input.search}%` : null
+    const from = `FROM subject_notes n
+        JOIN admin_schools school ON school.id = n.school_id
+        JOIN education_levels level ON level.id = n.education_level_id
+        JOIN grades grade ON grade.id = n.grade_id
+        JOIN subjects subject ON subject.id = n.subject_id
+        LEFT JOIN programs program ON program.id = n.program_id
+        WHERE $1::text IS NULL OR n.title ILIKE $1 OR n.topic ILIKE $1 OR n.body ILIKE $1
+            OR school.name ILIKE $1 OR grade.name ILIKE $1 OR subject.name ILIKE $1 OR level.name ILIKE $1 OR program.name ILIKE $1`
+    const [rows, count] = await Promise.all([
+        pool.query(`SELECT n.id, n.school_id, n.education_level_id, n.grade_id, n.program_id, n.subject_id, n.title, n.topic, n.body, n.status, n.created_at, n.updated_at,
+            school.name AS school_name, level.name AS education_level_name, grade.name AS class_name, program.name AS program_name, subject.name AS subject_name,
+            (SELECT COALESCE(json_agg(json_build_object('id', a.id, 'name', a.name, 'type', a.mime_type, 'size', a.size_bytes) ORDER BY a.created_at), '[]'::json)
+             FROM subject_note_attachments a WHERE a.note_id = n.id) AS attachments
+            ${from} ORDER BY n.updated_at DESC LIMIT $2 OFFSET $3`, [pattern, input.limit, input.offset]),
+        pool.query(`SELECT count(*)::int AS total ${from}`, [pattern]),
+    ])
+    response.json({ data: rows.rows, meta: { total: count.rows[0].total, limit: input.limit, offset: input.offset } })
+}))
+
+router.post('/subject-notes', asyncHandler(async (request, response) => {
+    const input = subjectNoteInput.parse(request.body)
+    if (!input.body && !input.attachmentIds.length) throw new HttpError(400, 'Add note content or at least one file')
+    await validateSubjectNoteTarget(input)
+    const client = await pool.connect()
+    let result
+    try {
+        await client.query('BEGIN')
+        result = await client.query(`INSERT INTO subject_notes (school_id, education_level_id, grade_id, program_id, subject_id, title, topic, body, status, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id, school_id, education_level_id, grade_id, program_id, subject_id, title, topic, body, status, created_at, updated_at`, [
+            input.schoolId, input.educationLevelId, input.gradeId, input.programId || null, input.subjectId, input.title, input.topic, input.body,
+            z.enum(['draft', 'published']).default('draft').parse(request.body.status), request.auth!.userId,
+        ])
+        await saveSubjectNoteAttachments(client, result.rows[0].id, request.auth!.userId, input.attachmentIds)
+        await client.query('COMMIT')
+    } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+    } finally { client.release() }
+    await audit(request.auth!.userId, 'subject_note.created', 'subject_note', result.rows[0].id)
+    response.status(201).json({ data: result.rows[0] })
+}))
+
+router.patch('/subject-notes/:id', asyncHandler(async (request, response) => {
+    const noteId = id.parse(request.params.id)
+    const input = subjectNoteInput.parse(request.body)
+    if (!input.body && !input.attachmentIds.length) throw new HttpError(400, 'Add note content or at least one file')
+    await validateSubjectNoteTarget(input)
+    const client = await pool.connect()
+    let result
+    try {
+        await client.query('BEGIN')
+        result = await client.query(`UPDATE subject_notes SET school_id = $1, education_level_id = $2, grade_id = $3, program_id = $4, subject_id = $5, title = $6, topic = $7, body = $8, updated_at = now()
+            WHERE id = $9 RETURNING id, school_id, education_level_id, grade_id, program_id, subject_id, title, topic, body, status, created_at, updated_at`, [
+            input.schoolId, input.educationLevelId, input.gradeId, input.programId || null, input.subjectId, input.title, input.topic, input.body, noteId,
+        ])
+        if (!result.rows[0]) throw new HttpError(404, 'Subject note not found')
+        await saveSubjectNoteAttachments(client, noteId, request.auth!.userId, input.attachmentIds)
+        await client.query('COMMIT')
+    } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+    } finally { client.release() }
+    if (!result.rows[0]) throw new HttpError(404, 'Subject note not found')
+    await audit(request.auth!.userId, 'subject_note.updated', 'subject_note', noteId)
+    response.json({ data: result.rows[0] })
+}))
+
+router.patch('/subject-notes/:id/status', asyncHandler(async (request, response) => {
+    const noteId = id.parse(request.params.id)
+    const nextStatus = z.enum(['draft', 'published', 'archived']).parse(request.body.status)
+    if (nextStatus === 'published') {
+        const school = await pool.query("SELECT 1 FROM subject_notes n JOIN admin_schools s ON s.id = n.school_id WHERE n.id = $1 AND s.status = 'active'", [noteId])
+        if (!school.rows[0]) throw new HttpError(400, 'Notes can only be published to an active school')
+    }
+    const result = await pool.query('UPDATE subject_notes SET status = $1, updated_at = now() WHERE id = $2 RETURNING id, status, updated_at', [nextStatus, noteId])
+    if (!result.rows[0]) throw new HttpError(404, 'Subject note not found')
+    await audit(request.auth!.userId, `subject_note.${nextStatus}`, 'subject_note', noteId)
+    response.json({ data: result.rows[0] })
+}))
+
+router.delete('/subject-notes/:id', asyncHandler(async (request, response) => {
+    const noteId = id.parse(request.params.id)
+    const result = await pool.query('DELETE FROM subject_notes WHERE id = $1 RETURNING id', [noteId])
+    if (!result.rows[0]) throw new HttpError(404, 'Subject note not found')
+    await audit(request.auth!.userId, 'subject_note.deleted', 'subject_note', noteId)
+    response.status(204).send()
+}))
+
+router.delete('/subject-note-attachments/:id', asyncHandler(async (request, response) => {
+    const attachmentId = id.parse(request.params.id)
+    const result = await pool.query('DELETE FROM subject_note_attachments WHERE id = $1 AND created_by = $2 AND note_id IS NULL RETURNING id', [attachmentId, request.auth!.userId])
+    if (!result.rows[0]) throw new HttpError(404, 'Unattached file not found')
+    response.status(204).send()
 }))
 
 router.get('/review', asyncHandler(async (_request, response) => {

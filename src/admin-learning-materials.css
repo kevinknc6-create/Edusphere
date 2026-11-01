@@ -1,0 +1,39 @@
+:root {
+    --text: var(--ink);
+    --muted: #7b8497;
+    --card: var(--surface);
+    --border: var(--line);
+    --bg: var(--page);
+    --row: var(--surface-soft);
+    --input: var(--surface);
+    --primary: var(--blue);
+}
+
+.admin-page {
+    max-width: 1220px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.admin-access-state {
+    display: grid;
+    justify-items: start;
+    gap: 12px;
+    max-width: 700px;
+    margin: 36px auto;
+    padding: 28px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    color: var(--ink);
+}
+
+.admin-access-state p {
+    margin: 0;
+}
+
+@media (max-width: 620px) {
+    .admin-page {
+        padding: 16px;
+    }
+}

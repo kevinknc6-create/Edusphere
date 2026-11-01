@@ -27,14 +27,16 @@ async function scoreAssessment(questionTable: 'questions' | 'exam_questions' | '
 
 router.get('/me/education-profile', asyncHandler(async (request, response) => {
     const result = await pool.query(`
-		SELECT s.education_level_id, s.grade_id, s.program_id,
+		SELECT s.education_level_id, s.grade_id, s.program_id, s.school_id, school.status AS school_status,
 			   el.name AS education_level_name, el.code AS education_level_code,
 			   g.name AS grade_name, g.code AS grade_code,
-			   p.name AS program_name
+			   p.name AS program_name,
+               EXISTS (SELECT 1 FROM admin_schools WHERE status = 'active') AS school_assignment_required
 		FROM students s
 		LEFT JOIN education_levels el ON el.id = s.education_level_id
 		LEFT JOIN grades g ON g.id = s.grade_id
 		LEFT JOIN programs p ON p.id = s.program_id
+        LEFT JOIN admin_schools school ON school.id = s.school_id
 		WHERE s.user_id = $1`, [request.auth?.userId])
     response.json({ data: result.rows[0] || null })
 }))
@@ -44,6 +46,7 @@ router.patch('/me/education-profile', asyncHandler(async (request, response) => 
         educationLevelId: z.string().uuid(),
         gradeId: z.string().uuid().nullable().optional(),
         programId: z.string().uuid().nullable().optional(),
+        schoolId: z.string().uuid().nullable().optional(),
     }).parse(request.body)
     const gradeId = input.gradeId || null
     const programId = input.programId || null
@@ -57,16 +60,73 @@ router.patch('/me/education-profile', asyncHandler(async (request, response) => 
         const program = await pool.query('SELECT id, name FROM programs WHERE id = $1', [programId])
         if (!program.rows[0]) throw new HttpError(400, 'The selected program is not available')
     }
+    if (input.schoolId) {
+        const school = await pool.query("SELECT id FROM admin_schools WHERE id = $1 AND status = 'active'", [input.schoolId])
+        if (!school.rows[0]) throw new HttpError(400, 'The selected school is not available')
+    }
     const result = await pool.query(`
 		UPDATE students
 		SET education_level_id = $1,
 			grade_id = $2,
 			program_id = $3,
-			education_level = $4,
-			school_class = $5
-		WHERE user_id = $6
-		RETURNING education_level_id, grade_id, program_id`, [input.educationLevelId, gradeId, programId, level.rows[0].name, gradeId || null, request.auth?.userId])
+            school_id = CASE WHEN $4::boolean THEN $5::uuid ELSE school_id END,
+			education_level = $6,
+			school_class = $7
+		WHERE user_id = $8
+		RETURNING education_level_id, grade_id, program_id, school_id`, [input.educationLevelId, gradeId, programId, Object.hasOwn(input, 'schoolId'), input.schoolId || null, level.rows[0].name, gradeId || null, request.auth?.userId])
     response.json({ data: result.rows[0] })
+}))
+
+router.get('/subjects/:subjectId/notes', asyncHandler(async (request, response) => {
+    const subjectId = z.string().uuid().parse(request.params.subjectId)
+    const result = await pool.query(`SELECT n.id, n.title, n.topic, n.body, n.created_at, n.updated_at,
+        (SELECT COALESCE(json_agg(json_build_object('id', a.id, 'name', a.name, 'type', a.mime_type, 'size', a.size_bytes) ORDER BY a.created_at), '[]'::json)
+         FROM subject_note_attachments a WHERE a.note_id = n.id) AS attachments
+        FROM subject_notes n
+        JOIN students student ON student.user_id = $1
+        JOIN admin_schools school ON school.id = student.school_id AND school.status = 'active'
+        WHERE n.subject_id = $2
+          AND n.school_id = student.school_id
+          AND n.education_level_id = student.education_level_id
+          AND n.grade_id IS NOT DISTINCT FROM student.grade_id
+          AND n.program_id IS NOT DISTINCT FROM student.program_id
+          AND n.status = 'published'
+          AND EXISTS (
+              SELECT 1 FROM courses course
+              WHERE course.subject_id = n.subject_id AND course.status = 'published'
+                AND course.education_level_id = student.education_level_id
+                AND course.grade_id IS NOT DISTINCT FROM student.grade_id
+                AND course.program_id IS NOT DISTINCT FROM student.program_id
+          )
+        ORDER BY n.created_at DESC, n.id`, [request.auth!.userId, subjectId])
+    response.json({ data: result.rows })
+}))
+
+router.get('/subject-note-attachments/:attachmentId', asyncHandler(async (request, response) => {
+    const attachmentId = z.string().uuid().parse(request.params.attachmentId)
+    const result = await pool.query(`SELECT a.name, a.mime_type, a.file_data
+        FROM subject_note_attachments a
+        JOIN subject_notes n ON n.id = a.note_id AND n.status = 'published'
+        JOIN students student ON student.user_id = $1
+        JOIN admin_schools school ON school.id = student.school_id AND school.status = 'active'
+        WHERE a.id = $2
+          AND n.school_id = student.school_id
+          AND n.education_level_id = student.education_level_id
+          AND n.grade_id IS NOT DISTINCT FROM student.grade_id
+          AND n.program_id IS NOT DISTINCT FROM student.program_id
+          AND EXISTS (
+              SELECT 1 FROM courses course
+              WHERE course.subject_id = n.subject_id AND course.status = 'published'
+                AND course.education_level_id = student.education_level_id
+                AND course.grade_id IS NOT DISTINCT FROM student.grade_id
+                AND course.program_id IS NOT DISTINCT FROM student.program_id
+          )`, [request.auth!.userId, attachmentId])
+    const file = result.rows[0]
+    if (!file) throw new HttpError(404, 'Attachment not found')
+    response.setHeader('X-Content-Type-Options', 'nosniff')
+    response.type(file.mime_type)
+    response.attachment(file.name)
+    response.send(file.file_data)
 }))
 
 async function curriculumDashboard(userId: string) {
