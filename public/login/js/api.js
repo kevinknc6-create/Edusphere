@@ -12,7 +12,8 @@ export class ApiError extends Error {
 export async function api(path, { method = "GET", body } = {}) {
   let response;
   try {
-    response = await fetch(`/api/auth${path}`, {
+  const API_BASE_URL = import.meta.env.VITE_API_URL;
+response = await fetch(`${API_BASE_URL}/api/auth${path}`, {
       method,
       headers: body === undefined ? { Accept: "application/json" } : {
         Accept: "application/json",
