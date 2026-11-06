@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from 'react'
-import { ArrowLeft, ArrowRight, Award, BarChart3, Bell, BookOpen, Bookmark, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, Clock3, Code2, Download, Edit3, Eye, EyeOff, FileText, Flame, Image as ImageIcon, LayoutDashboard, ListChecks, LockKeyhole, LogIn, Menu, Moon, MoreHorizontal, NotebookPen, Play, Plus, RotateCcw, Search, Send, Settings, Sparkles, Sun, Target, Timer, Trash2, Trophy, Upload, Users, Video, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Award, BarChart3, Bell, BookOpen, Bookmark, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePlay, Clock3, Code2, Download, Edit3, Eye, EyeOff, FileText, Flame, Image as ImageIcon, LayoutDashboard, ListChecks, LockKeyhole, LogIn, Menu, Moon, MoreHorizontal, NotebookPen, Play, Plus, RotateCcw, Search, Send, Sparkles, Sun, Target, Timer, Trash2, Trophy, Upload, Users, Video, X } from 'lucide-react'
 import './App.css'
 import { canAccessAdmin } from './security/authorization'
 import { api, getAccessToken, getStoredUser, type ApiCourse, type ApiSession, type EducationProfile, type LearningDashboard, type LearningSummary, type TvetDashboard as TvetDashboardData, type UniversityDashboard as UniversityDashboardData } from './lib/api'
@@ -13,13 +13,15 @@ import LearningPath from './components/LearningPath'
 import LessonWorkspace from './components/LessonWorkspace'
 import TeacherWorkspace from './components/TeacherWorkspace'
 import TeacherLoginScreen from './components/TeacherLoginScreen'
+import StudentAiTutor from './components/StudentAiTutor'
 
 void Dashboard
 void CoursePage
 void LessonPage
+void SubjectPage
 void TeacherPortal
 
-type View = 'dashboard' | 'subjects' | 'course' | 'lesson' | 'assessment' | 'results' | 'teacher'
+type View = 'dashboard' | 'learning' | 'calendar' | 'achievements' | 'course' | 'lesson' | 'assessment' | 'results' | 'teacher'
 type AuthMode = 'login' | 'register'
 type AssessmentMode = 'practice' | 'test' | 'exam'
 type Question = { id: number; type: 'multiple-choice' | 'true-false' | 'fill-blank' | 'matching' | 'short-answer' | 'programming'; prompt: string; options?: string[]; answer: string; explanation: string }
@@ -65,16 +67,18 @@ function App() {
     const [availableCourses, setAvailableCourses] = useState<Course[]>(courses)
     const [educationProfile, setEducationProfile] = useState<EducationProfile | null>(null)
     const [learningDashboard, setLearningDashboard] = useState<LearningDashboard | null>(null)
+    const [learningDashboardLoading, setLearningDashboardLoading] = useState(false)
+    const [learningDashboardError, setLearningDashboardError] = useState('')
     const [tvetDashboard, setTvetDashboard] = useState<TvetDashboardData | null>(null)
     const [universityDashboard, setUniversityDashboard] = useState<UniversityDashboardData | null>(null)
     const [learningSummary, setLearningSummary] = useState<LearningSummary | null>(null)
     const [activeCourse, setActiveCourse] = useState<Course | null>(null)
     const [activeLessonId, setActiveLessonId] = useState<string | undefined>(() => sessionStorage.getItem('edusphere-active-lesson') || undefined)
-    const [activeSubject, setActiveSubject] = useState('All subjects')
     const [query, setQuery] = useState('')
     const [darkMode, setDarkMode] = useState(() => localStorage.getItem('edusphere-theme') === 'dark')
     const [mobileMenu, setMobileMenu] = useState(false)
     const [notifications, setNotifications] = useState(false)
+    const [profileMenu, setProfileMenu] = useState(false)
     const [assessmentMode, setAssessmentMode] = useState<AssessmentMode>('practice')
     const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(() => { const saved = localStorage.getItem('edusphere-last-result'); return saved ? JSON.parse(saved) as AssessmentResult : null })
     const [teacherTab, setTeacherTab] = useState('Overview')
@@ -89,6 +93,8 @@ function App() {
         setAvailableCourses([])
         setEducationProfile(null)
         setLearningDashboard(null)
+        setLearningDashboardLoading(false)
+        setLearningDashboardError('')
         setTvetDashboard(null)
         setUniversityDashboard(null)
         setLearningSummary(null)
@@ -145,16 +151,47 @@ function App() {
     useEffect(() => {
         if (!isAuthenticated || currentUser?.role !== 'student') return
         if (!educationProfile?.education_level_id) return
+        let cancelled = false
+        setLearningDashboardLoading(true)
+        setLearningDashboardError('')
         api.learningDashboard().then((result) => {
+            if (cancelled) return
             setLearningDashboard(result.data)
+            setLearningDashboardError('')
             setEducationProfile(result.data.profile)
             const completedByCourse = new Map<string, number>()
             for (const item of result.data.progress as Array<{ course_id: string; completed_at: string | null }>) {
                 if (item.completed_at) completedByCourse.set(item.course_id, (completedByCourse.get(item.course_id) || 0) + 1)
             }
             setAvailableCourses(result.data.courses.map((course: ApiCourse, index) => ({ id: course.id, title: course.title, category: course.subject, teacher: course.teacher || '', lessons: course.lessons || 0, progress: course.lessons ? Math.round((completedByCourse.get(course.id) || 0) / course.lessons * 100) : 0, difficulty: course.difficulty, color: ['coral', 'sky', 'ink', 'violet'][index % 4], icon: '•', description: course.description })))
-        }).catch(() => { setLearningDashboard(null); setAvailableCourses([]) })
+        }).catch((error: unknown) => {
+            if (cancelled) return
+            setLearningDashboard(null)
+            setAvailableCourses([])
+            setLearningDashboardError(error instanceof Error ? error.message : 'Learning materials could not be loaded.')
+        }).finally(() => {
+            if (!cancelled) setLearningDashboardLoading(false)
+        })
+        return () => { cancelled = true }
     }, [isAuthenticated, currentUser?.id, currentUser?.role, educationProfile?.education_level_id, educationProfile?.grade_id, educationProfile?.program_id])
+    useEffect(() => {
+        if (!isAuthenticated || currentUser?.role !== 'student' || view !== 'learning') return
+        let cancelled = false
+        const refreshMaterials = async () => {
+            try {
+                const result = await api.learningDashboard()
+                if (!cancelled) {
+                    setLearningDashboard(result.data)
+                    setLearningDashboardError('')
+                }
+            } catch (error) {
+                if (!cancelled) setLearningDashboardError(error instanceof Error ? error.message : 'Learning materials could not be refreshed.')
+            }
+        }
+        void refreshMaterials()
+        const timer = window.setInterval(() => { void refreshMaterials() }, 15_000)
+        return () => { cancelled = true; window.clearInterval(timer) }
+    }, [isAuthenticated, currentUser?.id, currentUser?.role, view])
     useEffect(() => {
         if (!isAuthenticated || currentUser?.role !== 'student' || dashboardCategory !== 'tvet' || !profileProgramId || !profileGradeId) return
         api.tvetDashboard().then((result) => setTvetDashboard(result.data)).catch(() => setTvetDashboard(null))
@@ -166,6 +203,19 @@ function App() {
     useEffect(() => { const timer = window.setTimeout(() => setIsBooting(false), 280); return () => window.clearTimeout(timer) }, [])
 
     async function logout() { try { await api.logout() } finally { clearSessionData(); setCurrentUser(null); setIsAuthenticated(false); setShowEducationOnboarding(false); setView('dashboard') } }
+    async function refreshLearningDashboard() {
+        setLearningDashboardLoading(true)
+        setLearningDashboardError('')
+        try {
+            const result = await api.learningDashboard()
+            setLearningDashboard(result.data)
+            setLearningDashboardError('')
+        } catch (error) {
+            setLearningDashboardError(error instanceof Error ? error.message : 'Learning materials could not be refreshed.')
+        } finally {
+            setLearningDashboardLoading(false)
+        }
+    }
     async function changeLearningPath() {
         window.alert('Your school assigns your class and program. Contact your school administrator to request a correction or transfer.')
     }
@@ -182,27 +232,181 @@ function App() {
     if (currentUser?.role === 'student' && educationProfileError) return <main className="education-onboarding"><div className="education-onboarding-glow" /><section className="education-onboarding-content"><div className="education-intro"><h1>Your class could not be loaded.</h1><p role="alert">{educationProfileError}</p><button className="education-continue" onClick={() => { setEducationProfileError(''); setEducationProfileLoading(true); setEducationProfileLoadAttempt((attempt) => attempt + 1) }}>Try again</button></div></section></main>
     if (showEducationOnboarding) return <EducationOnboarding initialProfile={educationProfile} onComplete={completeEducationOnboarding} />
 
-    const filteredCourses = availableCourses.filter((course) => {
-        const matchesQuery = `${course.title} ${course.category} ${course.teacher}`.toLowerCase().includes(query.toLowerCase())
-        const matchesSubject = activeSubject === 'All subjects' || course.category === activeSubject || (activeSubject === 'Technology' && course.category === 'Software Development') || (activeSubject === 'Science' && course.category === 'Physics')
-        return matchesQuery && matchesSubject
-    })
+    const dashboardCourses: Course[] = dashboardCategory === 'university' && universityDashboard?.courses.length
+        ? universityDashboard.courses.map((course, index) => ({
+            id: course.id,
+            title: course.title,
+            category: course.subject,
+            teacher: course.teacher || '',
+            lessons: course.lessons || 0,
+            progress: learningSummary?.courses.find((item) => item.id === course.id)?.progress || 0,
+            difficulty: course.difficulty || 'Course',
+            color: ['coral', 'sky', 'ink', 'violet'][index % 4],
+            icon: '•',
+            description: course.description,
+        }))
+        : availableCourses
+    const filteredCourses = dashboardCourses.filter((course) => `${course.title} ${course.category} ${course.teacher}`.toLowerCase().includes(query.toLowerCase()))
     const openCourse = (course: Course) => { setActiveCourse(course); setView('course'); setMobileMenu(false) }
     const openLesson = (lessonId?: string) => { const nextLessonId = lessonId || sessionStorage.getItem('edusphere-active-lesson') || undefined; setActiveLessonId(nextLessonId); setView('lesson'); setMobileMenu(false) }
     const openAssessment = (mode: AssessmentMode) => { setAssessmentMode(mode); setView('assessment'); setMobileMenu(false) }
     const saveAssessmentResult = (result: AssessmentResult) => { setAssessmentResult(result); localStorage.setItem('edusphere-last-result', JSON.stringify(result)); setView('results') }
-    const nav = (nextView: View) => { setView(nextView); setMobileMenu(false) }
+    const nav = (nextView: View) => { setView(nextView); setMobileMenu(false); setProfileMenu(false) }
+    const openLearning = () => {
+        setProfileMenu(false)
+        if (currentUser?.role === 'teacher') {
+            setView('teacher')
+            setTeacherTab('My Courses')
+            setMobileMenu(false)
+        }
+        else nav('learning')
+    }
+    const openHome = () => {
+        setProfileMenu(false)
+        if (currentUser?.role === 'teacher') {
+            setView('teacher')
+            setTeacherTab('Overview')
+            setMobileMenu(false)
+        } else nav('dashboard')
+    }
+    const overviewCategory = dashboardCategory === 'primary' ? 'primary' : 'secondary'
+    const homeIsActive = currentUser?.role === 'teacher' ? view === 'teacher' && teacherTab === 'Overview' : view === 'dashboard'
     return <div className="app-shell">
-        <aside className={`sidebar ${mobileMenu ? 'is-open' : ''}`}><div className="brand"><span className="brand-mark"><Sparkles size={18} /></span><span>Edu<span>Sphere</span></span></div><button className="mobile-close icon-button" aria-label="Close menu" onClick={() => setMobileMenu(false)}><X size={20} /></button><div className="profile-card"><div className="avatar">{(currentUser?.fullName || 'S').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><strong>{currentUser?.fullName || 'Student'}</strong><span>{view === 'teacher' ? 'Teacher account' : 'Student account'}</span></div><button className="more-button" aria-label="Profile options"><MoreHorizontal size={17} /></button></div><nav className="main-nav" aria-label="Main navigation"><p className="nav-label">Workspace</p><NavButton icon={<LayoutDashboard size={18} />} label={view === 'teacher' ? 'Teacher home' : 'Overview'} active={view === 'dashboard' || view === 'teacher'} onClick={() => view === 'teacher' ? setTeacherTab('Overview') : nav('dashboard')} /><NavButton icon={<BookOpen size={18} />} label="My learning" active={view === 'course' || view === 'lesson'} count="3" onClick={() => nav('course')} /><NavButton icon={<Target size={18} />} label="Explore subjects" active={view === 'subjects'} onClick={() => nav('subjects')} /><NavButton icon={<CalendarDays size={18} />} label="Calendar" onClick={() => nav(view === 'teacher' ? 'teacher' : 'dashboard')} /><p className="nav-label secondary-label">Community</p><NavButton icon={<Trophy size={18} />} label="Achievements" onClick={() => nav('dashboard')} /><NavButton icon={<Users size={18} />} label="Study groups" onClick={() => nav('dashboard')} /></nav><div className="sidebar-bottom"><button><Settings size={18} />Settings</button><button onClick={() => void logout()}><LogIn size={18} />Sign out</button><div className="help-card"><div className="help-icon"><Sparkles size={17} /></div><strong>Need a little help?</strong><span>Explore our learning guide.</span><button className="help-link">View guide <ArrowRight size={14} /></button></div><div className="sidebar-footer"><span>EduSphere v1.0</span><button aria-label="More options"><MoreHorizontal size={17} /></button></div></div></aside>
-        <main className="main-content"><header className="topbar"><button className="mobile-menu icon-button" aria-label="Open menu" onClick={() => setMobileMenu(true)}><Menu size={22} /></button><div className="breadcrumb"><span>{view === 'teacher' ? 'Teacher workspace' : 'Workspace'}</span><ChevronRight size={14} /><strong>{view === 'dashboard' ? 'Overview' : view === 'subjects' ? 'Explore subjects' : view === 'course' ? activeCourse?.title || 'Learning path' : view === 'teacher' ? teacherTab : 'Lesson'}</strong></div><div className="top-actions"><label className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses..." aria-label="Search courses" /><kbd>⌘ K</kbd></label><button className="icon-button" aria-label="Toggle dark mode" onClick={() => setDarkMode(!darkMode)}>{darkMode ? <Sun size={19} /> : <Moon size={19} />}</button><button className="icon-button notification-button" aria-label="Show notifications" onClick={() => setNotifications(!notifications)}><Bell size={19} /><i /></button><button className="small-avatar">{(currentUser?.fullName || 'S').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button></div>{notifications && <div className="notification-popover"><strong>Notifications</strong><p>{view === 'teacher' ? 'Review your latest submissions.' : 'Check your published learning activity.'}</p></div>}</header>
-            {view === 'dashboard' && (dashboardCategory === 'tvet' ? <TvetDashboard data={tvetDashboard} loading={!tvetDashboard} onChangeLearningPath={changeLearningPath} /> : dashboardCategory === 'university' ? <UniversityDashboard data={universityDashboard} loading={!universityDashboard} onChangeLearningPath={changeLearningPath} /> : <StudentDashboard category={dashboardCategory} userName={currentUser?.fullName || 'Student'} courses={availableCourses} subjects={learningDashboard?.subjects || []} learningDashboard={learningDashboard} summary={learningSummary} profile={educationProfile} onExplore={() => nav('subjects')} onOpenCourse={openCourse} onChangeLearningPath={changeLearningPath} />)}
-            {view === 'subjects' && <SubjectPage courses={filteredCourses} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onOpenCourse={openCourse} />}
-            {view === 'course' && activeCourse && <LearningPath courseId={activeCourse.id} fallbackTitle={activeCourse.title} fallbackCategory={activeCourse.category} fallbackDescription={activeCourse.description} fallbackTeacher={activeCourse.teacher} color={activeCourse.color} icon={activeCourse.icon} onBack={() => nav('subjects')} onLesson={openLesson} />}
+        <aside className={`sidebar ${mobileMenu ? 'is-open' : ''}`}>
+            <div className="brand"><span className="brand-mark"><Sparkles size={18} /></span><span>Edu<span>Sphere</span></span></div>
+            <button className="mobile-close icon-button" aria-label="Close menu" onClick={() => setMobileMenu(false)}><X size={20} /></button>
+            <div className="profile-card">
+                <div className="avatar">{(currentUser?.fullName || 'S').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div>
+                <div><strong>{currentUser?.fullName || 'Student'}</strong><span>{currentUser?.role === 'teacher' ? 'Teacher account' : 'Student account'}</span></div>
+                <button className="more-button" aria-label="Profile options" aria-expanded={profileMenu} onClick={() => setProfileMenu((open) => !open)}><MoreHorizontal size={17} /></button>
+            </div>
+            <nav className="main-nav" aria-label="Main navigation">
+                <p className="nav-label">Workspace</p>
+                <NavButton icon={<LayoutDashboard size={18} />} label={currentUser?.role === 'teacher' ? 'Teacher home' : 'Overview'} active={currentUser?.role === 'teacher' ? view === 'teacher' && teacherTab === 'Overview' : view === 'dashboard'} onClick={openHome} />
+                <NavButton icon={<BookOpen size={18} />} label="My learning" active={currentUser?.role === 'teacher' ? view === 'teacher' && teacherTab === 'My Courses' : view === 'learning' || view === 'course' || view === 'lesson'} count={String(currentUser?.role === 'student' ? learningDashboard?.materials.length || 0 : dashboardCourses.length)} onClick={openLearning} />
+                <NavButton icon={<CalendarDays size={18} />} label="Calendar" active={view === 'calendar'} onClick={() => nav('calendar')} />
+                <NavButton icon={<Trophy size={18} />} label="Achievements" active={view === 'achievements'} onClick={() => nav('achievements')} />
+            </nav>
+            <div className="sidebar-bottom">
+                <button onClick={() => setDarkMode((dark) => !dark)}>{darkMode ? <Sun size={18} /> : <Moon size={18} />}{darkMode ? 'Light mode' : 'Dark mode'}</button>
+                <button onClick={() => void logout()}><LogIn size={18} />Sign out</button>
+                <div className="help-card"><div className="help-icon"><Sparkles size={17} /></div><strong>Need a little help?</strong><span>Explore our learning guide.</span><button className="help-link" onClick={openLearning}>View learning <ArrowRight size={14} /></button></div>
+                <div className="sidebar-footer"><span>EduSphere v1.0</span></div>
+            </div>
+        </aside>
+        <main className="main-content">
+            <header className="topbar">
+                <button className="mobile-menu icon-button" aria-label="Open menu" onClick={() => setMobileMenu(true)}><Menu size={22} /></button>
+                <div className="breadcrumb"><span>{currentUser?.role === 'teacher' ? 'Teacher workspace' : 'Workspace'}</span><ChevronRight size={14} /><strong>{view === 'dashboard' ? 'Overview' : view === 'learning' ? 'My learning' : view === 'calendar' ? 'Calendar' : view === 'achievements' ? 'Achievements' : view === 'course' ? activeCourse?.title || 'My learning' : view === 'teacher' ? teacherTab : view === 'assessment' ? 'Assessment' : view === 'results' ? 'Results' : 'Lesson'}</strong></div>
+                <div className="top-actions">
+                    <label className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses..." aria-label="Search courses" onFocus={openLearning} /><kbd>⌘ K</kbd></label>
+                    <button className="icon-button" aria-label="Toggle dark mode" onClick={() => setDarkMode(!darkMode)}>{darkMode ? <Sun size={19} /> : <Moon size={19} />}</button>
+                    <button className="icon-button notification-button" aria-label="Show notifications" onClick={() => setNotifications(!notifications)}><Bell size={19} /><i /></button>
+                    <div className="profile-menu-wrap">
+                        <button className="small-avatar" aria-label="Open user menu" aria-expanded={profileMenu} onClick={() => setProfileMenu((open) => !open)}>{(currentUser?.fullName || 'S').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}<MoreHorizontal size={14} /></button>
+                        {profileMenu && <div className="profile-menu" role="menu">
+                            <strong>{currentUser?.fullName || 'Student'}</strong><small>{currentUser?.email}</small>
+                            <button role="menuitem" onClick={openLearning}><BookOpen size={15} />My learning</button>
+                            <button role="menuitem" onClick={() => nav('calendar')}><CalendarDays size={15} />Calendar</button>
+                            <button role="menuitem" onClick={() => nav('achievements')}><Trophy size={15} />Achievements</button>
+                            <button role="menuitem" onClick={() => { setDarkMode((dark) => !dark); setProfileMenu(false) }}>{darkMode ? <Sun size={15} /> : <Moon size={15} />}{darkMode ? 'Light mode' : 'Dark mode'}</button>
+                            <button role="menuitem" onClick={() => void logout()}><LogIn size={15} />Sign out</button>
+                        </div>}
+                    </div>
+                </div>
+                {notifications && <div className="notification-popover"><strong>Notifications</strong><p>{view === 'teacher' ? 'Review your latest submissions.' : 'Check your published learning activity.'}</p></div>}
+            </header>
+            {view === 'dashboard' && (dashboardCategory === 'tvet' ? <TvetDashboard data={tvetDashboard} loading={!tvetDashboard} courses={dashboardCourses} onOpenCourse={openCourse} onViewAllCourses={openLearning} onChangeLearningPath={changeLearningPath} /> : dashboardCategory === 'university' ? <UniversityDashboard data={universityDashboard} loading={!universityDashboard} courses={dashboardCourses} onOpenCourse={openCourse} onViewAllCourses={openLearning} onChangeLearningPath={changeLearningPath} /> : <StudentDashboard mode="overview" category={overviewCategory} userName={currentUser?.fullName || 'Student'} courses={dashboardCourses} subjects={learningDashboard?.subjects || []} learningDashboard={learningDashboard} summary={learningSummary} profile={educationProfile} onOpenCourse={openCourse} onViewAllCourses={openLearning} onChangeLearningPath={changeLearningPath} />)}
+            {view === 'learning' && currentUser?.role === 'student' && <StudentDashboard mode="learning" category={overviewCategory} userName={currentUser.fullName} courses={filteredCourses} subjects={learningDashboard?.subjects || []} learningDashboard={learningDashboard} learningDashboardLoading={learningDashboardLoading} learningDashboardError={learningDashboardError} onRefreshLearningDashboard={() => void refreshLearningDashboard()} summary={learningSummary} profile={educationProfile} onOpenCourse={openCourse} onViewAllCourses={openLearning} onChangeLearningPath={changeLearningPath} />}
+            {view === 'calendar' && <CalendarPage homework={learningSummary?.homework || []} />}
+            {view === 'achievements' && <AchievementsPage summary={learningSummary} />}
+            {view === 'course' && activeCourse && <LearningPath courseId={activeCourse.id} fallbackTitle={activeCourse.title} fallbackCategory={activeCourse.category} fallbackDescription={activeCourse.description} fallbackTeacher={activeCourse.teacher} color={activeCourse.color} icon={activeCourse.icon} onBack={openLearning} onLesson={openLesson} />}
             {view === 'lesson' && activeCourse && <LessonWorkspace courseId={activeCourse.id} lessonId={activeLessonId} courseTitle={activeCourse.title} onBack={() => nav('course')} onAssessment={openAssessment} />}
             {view === 'assessment' && <AssessmentPage mode={assessmentMode} onBack={() => nav('course')} onSubmit={saveAssessmentResult} />}
             {view === 'results' && assessmentResult && <ResultsPage userName={currentUser?.fullName || 'Student'} result={assessmentResult} onRetry={() => openAssessment(assessmentResult.mode)} onBack={() => nav('course')} />}
             {view === 'teacher' && currentUser?.role === 'teacher' && <TeacherWorkspace />}
-        </main><nav className="mobile-nav" aria-label="Mobile navigation"><button className={view === 'dashboard' ? 'active' : ''} onClick={() => nav('dashboard')}><LayoutDashboard size={19} /><span>Home</span></button><button className={view === 'course' || view === 'lesson' ? 'active' : ''} onClick={() => nav('course')}><BookOpen size={19} /><span>Learn</span></button><button className={view === 'subjects' ? 'active' : ''} onClick={() => nav('subjects')}><Search size={19} /><span>Explore</span></button><button onClick={() => nav('dashboard')}><Trophy size={19} /><span>Awards</span></button></nav>
+        </main>
+        <nav className="mobile-nav" aria-label="Mobile navigation">
+            <button className={homeIsActive ? 'active' : ''} onClick={openHome}><LayoutDashboard size={19} /><span>Home</span></button>
+            <button className={view === 'learning' || view === 'course' || view === 'lesson' ? 'active' : ''} onClick={openLearning}><BookOpen size={19} /><span>My learning</span></button>
+            <button className={view === 'calendar' ? 'active' : ''} onClick={() => nav('calendar')}><CalendarDays size={19} /><span>Calendar</span></button>
+            <button className={view === 'achievements' ? 'active' : ''} onClick={() => nav('achievements')}><Trophy size={19} /><span>Awards</span></button>
+        </nav>
+        <StudentAiTutor />
+    </div>
+}
+
+function CalendarPage({ homework }: { homework: LearningSummary['homework'] }) {
+    const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
+    const offset = (new Date(month.getFullYear(), month.getMonth(), 1).getDay() + 6) % 7
+    const dayCount = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
+    const cells = [...Array(offset).fill(null), ...Array.from({ length: dayCount }, (_, index) => index + 1)]
+    const events = homework.flatMap((item) => {
+        const dueDate = new Date(item.due_at)
+        if (Number.isNaN(dueDate.getTime())) return []
+        return [{ ...item, day: dueDate.getDate(), month: dueDate.getMonth(), year: dueDate.getFullYear() }]
+    })
+    const today = new Date()
+    const assignmentsThisMonth = events.filter((event) => event.month === month.getMonth() && event.year === month.getFullYear())
+        .sort((a, b) => a.day - b.day)
+
+    return <div className="workspace-page calendar-page">
+        <header className="workspace-page-heading">
+            <div><span className="workspace-page-kicker"><CalendarDays size={15} /> Stay on track</span><h1>Calendar</h1><p>Keep an eye on homework due dates and your study schedule.</p></div>
+            <div className="calendar-month-controls">
+                <button aria-label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={18} /></button>
+                <strong>{month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong>
+                <button aria-label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={18} /></button>
+            </div>
+        </header>
+        <section className="calendar-panel">
+            <div className="calendar-grid calendar-weekdays">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span key={day}>{day}</span>)}</div>
+            <div className="calendar-grid calendar-days">
+                {cells.map((day, index) => {
+                    if (day === null) return <div className="calendar-day empty" key={`empty-${index}`} />
+                    const dueItems = events.filter((event) => event.day === day && event.month === month.getMonth() && event.year === month.getFullYear())
+                    const isToday = today.getFullYear() === month.getFullYear() && today.getMonth() === month.getMonth() && today.getDate() === day
+                    return <div className={`calendar-day ${isToday ? 'today' : ''}`} key={day}>
+                        <span className="calendar-date">{day}</span>
+                        {dueItems.slice(0, 2).map((item) => <span className="calendar-event" key={item.id} title={item.title}>{item.title}</span>)}
+                        {dueItems.length > 2 && <small>+{dueItems.length - 2} more</small>}
+                    </div>
+                })}
+            </div>
+        </section>
+        <section className="calendar-agenda">
+            <div className="workspace-section-heading"><div><span>Your schedule</span><h2>Due this month</h2></div><span>{assignmentsThisMonth.length} {assignmentsThisMonth.length === 1 ? 'assignment' : 'assignments'}</span></div>
+            {assignmentsThisMonth.length ? assignmentsThisMonth.map((item) => <article className="calendar-agenda-item" key={item.id}>
+                <span className="calendar-agenda-date">{new Date(item.due_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>
+                <div><strong>{item.title}</strong><small>{item.status}</small></div>
+            </article>) : <div className="workspace-empty"><CalendarDays size={22} /><strong>No homework due this month</strong><span>New assignments from your class will appear here.</span></div>}
+        </section>
+    </div>
+}
+
+function AchievementsPage({ summary }: { summary: LearningSummary | null }) {
+    const achievements = summary?.achievements || []
+    const stats = [
+        { label: 'Lessons completed', value: summary?.lessonsCompleted || 0, Icon: BookOpen },
+        { label: 'Courses completed', value: summary?.coursesCompleted || 0, Icon: CheckCircle2 },
+        { label: 'Learning streak', value: `${summary?.learningStreak || 0} days`, Icon: Flame },
+    ]
+
+    return <div className="workspace-page achievements-page">
+        <header className="workspace-page-heading">
+            <div><span className="workspace-page-kicker"><Trophy size={15} /> Every step counts</span><h1>Achievements</h1><p>Celebrate your effort and the progress you have made.</p></div>
+        </header>
+        <section className="achievement-stats">
+            {stats.map(({ label, value, Icon }) => <article className="achievement-stat-card" key={label}><span><Icon size={20} /></span><div><strong>{value}</strong><small>{label}</small></div></article>)}
+        </section>
+        <section className="achievement-list-panel">
+            <div className="workspace-section-heading"><div><span>Your milestones</span><h2>Earned achievements</h2></div><span>{achievements.length} earned</span></div>
+            {achievements.length ? <div className="achievement-list">{achievements.map((achievement) => <article className="achievement-item" key={achievement.key}>
+                <span className="achievement-item-icon"><Award size={21} /></span>
+                <div><strong>{achievement.name}</strong><p>{achievement.description}</p></div>
+                <time dateTime={achievement.earned_at}>{new Date(achievement.earned_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</time>
+            </article>)}</div> : <div className="workspace-empty"><Award size={24} /><strong>Your next achievement is waiting</strong><span>Complete lessons and courses to unlock your first milestone.</span></div>}
+        </section>
     </div>
 }
 

@@ -208,9 +208,15 @@ async function processMaterial(materialId, providedSource = null) {
                 await client.query(`INSERT INTO learning_material_chunks (material_id, chunk_index, content, source_reference, search_vector)
                     VALUES ($1, $2, $3, $4, to_tsvector('simple', $3))`, [materialId, index, content, source.url || ""]);
             }
-            await client.query(`UPDATE curriculum_materials SET processing_status = 'completed',
+            await client.query(`UPDATE curriculum_materials AS material SET processing_status = 'completed',
+                status = CASE WHEN material.status = 'draft' AND material.rights_confirmed_at IS NOT NULL
+                    AND EXISTS (
+                        SELECT 1 FROM school_textbook_assignments assignment
+                        JOIN admin_schools school ON school.id = assignment.school_id AND school.status = 'active'
+                        WHERE assignment.material_id = material.id
+                    ) THEN 'published' ELSE material.status END,
                 processing_started_at = NULL, processing_error = '', processed_at = now(), updated_at = now()
-                WHERE id = $1 AND content_revision = $2`, [materialId, material.content_revision]);
+                WHERE material.id = $1 AND material.content_revision = $2`, [materialId, material.content_revision]);
             await client.query("COMMIT");
         } catch (error) {
             await client.query("ROLLBACK");

@@ -166,11 +166,11 @@ export default function LearningMaterialsManagement() {
                 }
             } else if (sourceType === 'url') {
                 await api.createAdminLearningMaterial(input)
-                setSuccess('Link validated and saved. Content processing has started.')
+                setSuccess('Link validated and saved. It will appear for assigned students automatically when processing is complete.')
             } else {
                 if (!file) throw new Error('Choose a PDF document to upload.')
                 await api.uploadAdminLearningMaterial(input, file)
-                setSuccess('PDF uploaded and content processing has started. It will not appear on the student dashboard until processing is complete and you select Publish on its row above.')
+                setSuccess('PDF uploaded and content processing has started. It will appear for assigned students automatically when processing is complete.')
             }
             resetForm()
             await load()
@@ -259,7 +259,7 @@ export default function LearningMaterialsManagement() {
                 <div><p className="eyebrow">Admin publishing</p><h2>Learning materials</h2></div>
                 <button className="secondary-button" disabled={loading || busy} onClick={() => void load()}><RefreshCw size={15} /> Refresh</button>
             </div>
-            <p className="admin-empty">PDF files are stored outside PostgreSQL. Only published materials that completed processing and match a learner’s school, class, program and enrolled subjects appear on student dashboards or in AI answers.</p>
+            <p className="admin-empty">PDF files are stored outside PostgreSQL. Materials that finish processing and match a learner’s school, class, program and enrolled subjects appear automatically on student dashboards and in AI answers.</p>
             {error && <p className="learning-material-notice error" role="alert">{error}</p>}
             {success && <p className="learning-material-notice success" role="status">{success}</p>}
             <label className="admin-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search title, description, school or subject" /></label>

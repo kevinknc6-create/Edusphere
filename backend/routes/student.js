@@ -115,7 +115,7 @@ router.get("/me/learning-dashboard", async (req, res) => {
         if (!profile) return res.status(404).json({ message: "User account not found" });
         if (!profile.school_id) return res.status(403).json({ message: "An active school assignment is required to access the student dashboard." });
 
-        const [curriculum, subjects, courses, notes, exercises, quizzes, progress, homework, units, outcomes, materials] = await Promise.all([
+        const [curriculum, subjects, courses, notes, exercises, quizzes, progress, homework, units, outcomes, materials, subjectNotes] = await Promise.all([
             pool.query(`
                 SELECT cs.id, cs.code, cs.name, cs.description, cs.source_reference,
                              cv.version_label, cv.effective_from, csrc.authority, csrc.title AS source_title, csrc.url AS source_url
@@ -225,22 +225,27 @@ router.get("/me/learning-dashboard", async (req, res) => {
                 LEFT JOIN course_lessons course_lesson ON course_lesson.id = m.course_lesson_id
                 LEFT JOIN tvet_lessons tvet_lesson ON tvet_lesson.id = m.tvet_lesson_id
                 LEFT JOIN tvet_modules tvet_module ON tvet_module.id = tvet_unit.module_id
-                JOIN school_textbook_assignments assignment ON assignment.material_id = m.id AND assignment.school_id = $4
-                JOIN admin_schools assigned_school ON assigned_school.id = assignment.school_id AND assigned_school.status = 'active'
                 WHERE m.status = 'published' AND m.processing_status = 'completed' AND m.rights_confirmed_at IS NOT NULL AND m.education_level_id = $1
+                    AND (NOT EXISTS (
+                        SELECT 1 FROM school_textbook_assignments any_assignment
+                        WHERE any_assignment.material_id = m.id
+                    ) OR EXISTS (
+                        SELECT 1 FROM school_textbook_assignments assignment
+                        JOIN admin_schools assigned_school ON assigned_school.id = assignment.school_id AND assigned_school.status = 'active'
+                        WHERE assignment.material_id = m.id AND assignment.school_id = $4
+                    ))
                     AND (m.curriculum_version_id IS NULL OR (v.status = 'active' AND src.verification_status = 'verified'))
                     AND (m.grade_id IS NULL OR m.grade_id = $2)
                     AND (m.program_id IS NULL OR m.program_id = $3)
                     AND (m.subject_id IS NULL OR m.tvet_subject_id IS NULL)
                     AND ((m.subject_id IS NULL AND m.tvet_subject_id IS NULL)
-                         OR EXISTS (SELECT 1 FROM student_curriculum_enrollments enrollment
-                            JOIN curriculum_subjects enrolled_subject ON enrolled_subject.id = enrollment.curriculum_subject_id
-                            WHERE enrollment.student_id = $5 AND enrollment.status = 'active'
-                                AND enrolled_subject.id = m.subject_id
-                                AND enrolled_subject.education_level_id = $1
-                                AND (enrolled_subject.grade_id IS NULL OR enrolled_subject.grade_id = $2)
-                                AND (enrolled_subject.program_id IS NULL OR enrolled_subject.program_id = $3)
-                                AND (enrolled_subject.combination_id IS NULL OR enrolled_subject.combination_id = $6))
+                         OR EXISTS (SELECT 1 FROM curriculum_subjects assigned_subject
+                            WHERE assigned_subject.id = m.subject_id
+                                AND assigned_subject.curriculum_version_id = m.curriculum_version_id
+                                AND assigned_subject.education_level_id = $1
+                                AND (assigned_subject.grade_id IS NULL OR assigned_subject.grade_id = $2)
+                                AND (assigned_subject.program_id IS NULL OR assigned_subject.program_id = $3)
+                                AND (assigned_subject.combination_id IS NULL OR assigned_subject.combination_id = $5))
                          OR EXISTS (SELECT 1 FROM tvet_subjects ts
                             WHERE ts.id = m.tvet_subject_id AND ts.curriculum_version_id = m.curriculum_version_id
                                 AND ts.program_id = $3 AND ts.grade_id = $2
@@ -262,9 +267,30 @@ router.get("/me/learning-dashboard", async (req, res) => {
                             JOIN tvet_competences competence ON competence.id = module.competence_id
                         WHERE unit.id = m.tvet_unit_id AND competence.subject_id = m.tvet_subject_id
                             AND unit.status = 'published' AND module.status = 'published' AND competence.status = 'published'))
-                ORDER BY m.material_type, m.title`, [profile.education_level_id, profile.grade_id, profile.program_id, profile.school_id, req.auth.userId, profile.subject_combination_id]),
+                ORDER BY m.material_type, m.title`, [profile.education_level_id, profile.grade_id, profile.program_id, profile.school_id, profile.subject_combination_id]),
+            pool.query(`SELECT n.id, n.title, n.topic, n.body, n.created_at, n.updated_at,
+                    s.name AS subject_name,
+                    (SELECT COALESCE(json_agg(json_build_object('id', a.id, 'name', a.name, 'type', a.mime_type, 'size', a.size_bytes) ORDER BY a.created_at), '[]'::json)
+                     FROM subject_note_attachments a WHERE a.note_id = n.id) AS attachments
+                FROM subject_notes n
+                JOIN users student ON student.id = $1 AND student.role = 'student'
+                JOIN admin_schools school ON school.id = student.school_id AND school.status = 'active'
+                JOIN library_subjects s ON s.id = n.subject_id
+                WHERE n.school_id = student.school_id
+                  AND n.education_level_id = student.education_level_id
+                  AND n.grade_id IS NOT DISTINCT FROM student.grade_id
+                  AND n.program_id IS NOT DISTINCT FROM student.program_id
+                  AND n.status = 'published'
+                  AND EXISTS (
+                      SELECT 1 FROM library_courses course
+                      WHERE course.subject_id = n.subject_id AND course.status = 'published'
+                        AND course.education_level_id = student.education_level_id
+                        AND course.grade_id IS NOT DISTINCT FROM student.grade_id
+                        AND course.program_id IS NOT DISTINCT FROM student.program_id
+                  )
+                ORDER BY n.created_at DESC, n.id`, [req.auth.userId]),
         ]);
-        res.json({ data: { profile, curriculum: curriculum.rows, subjects: subjects.rows, courses: courses.rows, materials: materials.rows, units: units.rows, outcomes: outcomes.rows, notes: notes.rows, exercises: exercises.rows, quizzes: quizzes.rows, tests: [], exams: [], homework: homework.rows, results: [], progress: progress.rows } });
+        res.json({ data: { profile, curriculum: curriculum.rows, subjects: subjects.rows, courses: courses.rows, materials: materials.rows, units: units.rows, outcomes: outcomes.rows, notes: notes.rows, subjectNotes: subjectNotes.rows, exercises: exercises.rows, quizzes: quizzes.rows, tests: [], exams: [], homework: homework.rows, results: [], progress: progress.rows } });
     } catch (error) {
         console.error("LEARNING DASHBOARD ERROR:", error.message);
         res.status(500).json({ message: "Learning dashboard is temporarily unavailable." });
@@ -521,7 +547,6 @@ router.get("/materials/:materialId/file", async (req, res) => {
             FROM curriculum_materials m
             JOIN users student ON student.id = $1 AND student.role = 'student' AND student.status = 'active'
             JOIN admin_schools school ON school.id = student.school_id AND school.status = 'active'
-            JOIN school_textbook_assignments assignment ON assignment.material_id = m.id AND assignment.school_id = student.school_id
             LEFT JOIN curriculum_versions version ON version.id = m.curriculum_version_id
             LEFT JOIN curriculum_sources source ON source.id = version.source_id
             LEFT JOIN course_lessons course_lesson ON course_lesson.id = m.course_lesson_id
@@ -534,20 +559,26 @@ router.get("/materials/:materialId/file", async (req, res) => {
             WHERE m.id = $2 AND m.source_type = 'upload' AND m.storage_key IS NOT NULL
                 AND m.status = 'published' AND m.processing_status = 'completed'
                 AND m.rights_confirmed_at IS NOT NULL
+                AND (NOT EXISTS (
+                    SELECT 1 FROM school_textbook_assignments any_assignment
+                    WHERE any_assignment.material_id = m.id
+                ) OR EXISTS (
+                    SELECT 1 FROM school_textbook_assignments assignment
+                    WHERE assignment.material_id = m.id AND assignment.school_id = student.school_id
+                ))
                 AND (m.curriculum_version_id IS NULL OR (version.status = 'active' AND source.verification_status = 'verified'))
                 AND (m.subject_id IS NULL OR m.tvet_subject_id IS NULL)
                 AND m.education_level_id = student.education_level_id
                 AND (m.grade_id IS NULL OR m.grade_id = student.grade_id)
                 AND (m.program_id IS NULL OR m.program_id = student.program_id)
                 AND ((m.subject_id IS NULL AND m.tvet_subject_id IS NULL)
-                    OR EXISTS (SELECT 1 FROM student_curriculum_enrollments enrollment
-                        JOIN curriculum_subjects enrolled_subject ON enrolled_subject.id = enrollment.curriculum_subject_id
-                        WHERE enrollment.student_id = student.id AND enrollment.status = 'active'
-                            AND enrolled_subject.id = m.subject_id
-                            AND enrolled_subject.education_level_id = student.education_level_id
-                            AND (enrolled_subject.grade_id IS NULL OR enrolled_subject.grade_id = student.grade_id)
-                            AND (enrolled_subject.program_id IS NULL OR enrolled_subject.program_id = student.program_id)
-                            AND (enrolled_subject.combination_id IS NULL OR enrolled_subject.combination_id = student.subject_combination_id))
+                    OR EXISTS (SELECT 1 FROM curriculum_subjects assigned_subject
+                        WHERE assigned_subject.id = m.subject_id
+                            AND assigned_subject.curriculum_version_id = m.curriculum_version_id
+                            AND assigned_subject.education_level_id = student.education_level_id
+                            AND (assigned_subject.grade_id IS NULL OR assigned_subject.grade_id = student.grade_id)
+                            AND (assigned_subject.program_id IS NULL OR assigned_subject.program_id = student.program_id)
+                            AND (assigned_subject.combination_id IS NULL OR assigned_subject.combination_id = student.subject_combination_id))
                     OR EXISTS (SELECT 1 FROM tvet_subjects tvet_subject
                         WHERE tvet_subject.id = m.tvet_subject_id AND tvet_subject.curriculum_version_id = m.curriculum_version_id
                             AND tvet_subject.program_id = student.program_id
