@@ -12,19 +12,20 @@ export class ApiError extends Error {
 export async function api(path, { method = "GET", body } = {}) {
   let response;
   try {
-  const API_BASE_URL = import.meta.env.VITE_API_URL;
-response = await fetch(`${API_BASE_URL}/api/auth${path}`, {
-      method,
-      headers: body === undefined ? { Accept: "application/json" } : {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-  } catch {
-    throw new ApiError("network", "Couldn't reach EduSphere. Check your connection and try again.");
-  }
+  const API_BASE_URL = "https://edusphere-g6tx.onrender.com";
+
+  response = await fetch(`${API_BASE_URL}/api/auth${path}`, {
+    method,
+    headers: body === undefined ? { Accept: "application/json" } : {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    credentials: "same-origin",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+} catch {
+  throw new ApiError("network", "Couldn't reach EduSphere. Check your connection and try again.");
+}
 
   let data = {};
   try {
